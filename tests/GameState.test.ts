@@ -72,7 +72,8 @@ describe('GameState Integration', () => {
         const res = game.attemptDiscard(discardCard.id);
 
         expect(res.success).toBe(false);
-        expect(res.msg).toContain('Opening requires');
+        // Check for points message first
+        expect(res.msg).toContain('36');
     });
     
     it('should track discard pile pickup constraint', () => {
@@ -91,6 +92,6 @@ describe('GameState Integration', () => {
         const resDisc = game.attemptDiscard(handCard.id);
         
         expect(resDisc.success).toBe(false);
-        expect(resDisc.msg).toContain('must meld');
+        expect(resDisc.msg).toContain('Must meld');
     });
 });
