@@ -5,11 +5,31 @@ import "./style.css";
 const game = new GameState();
 const ui = new UIManager(game);
 
+const HELP_TEXT = `Jolly Rules:
+
+1. Opening: You must have at least one Pure Run (Straight Flush without Jokers) and total meld points of 36+ to open.
+
+2. Melds:
+   - Sets: 3 or 4 cards of same rank.
+   - Runs: 3+ consecutive cards of same suit.
+
+3. Ace Values:
+   - 1 point in A-2-3 run.
+   - 10 points in Q-K-A run or Sets.
+
+4. Jolly Hand: If you have 12 cards and can take the bottom card to meld EVERYTHING at once, you win immediately.
+
+5. Jokers: Can replace any card. Swap them from table if you have the card they represent.`;
+
 const App = {
     init: () => {
         game.initGame();
         ui.render();
         ui.updateStatus("Your turn. Discard a card to start.");
+    },
+
+    showHelp: () => {
+        ui.showAlert(HELP_TEXT, "Help Topics");
     },
 
     humanDraw: (source: 'stock' | 'discard') => {
@@ -22,7 +42,7 @@ const App = {
                 ui.updateStatus(msg);
             });
         } else {
-            if (res.msg) alert(res.msg);
+            if (res.msg) ui.showAlert(res.msg);
         }
     },
 
@@ -36,14 +56,14 @@ const App = {
                 ui.updateStatus(`Pending Opening. Need Pure Run + 36pts. Current: ${game.turnPoints}`);
             }
         } else {
-            alert(res.msg);
+            ui.showAlert(res.msg || "Invalid Meld");
         }
     },
 
     humanDiscard: () => {
         const selected = game.pHand.filter(c => c.selected);
         if (selected.length !== 1) {
-            alert("Select exactly one card.");
+            ui.showAlert("Select exactly one card to discard.");
             return;
         }
 
@@ -67,7 +87,7 @@ const App = {
             }, 1000);
 
         } else {
-            alert(res.msg);
+            ui.showAlert(res.msg || "Cannot discard");
         }
     },
 
@@ -77,7 +97,7 @@ const App = {
             ui.render();
             ui.updateStatus(res.msg || "Jolly Hand Active!");
         } else {
-            alert(res.msg);
+            ui.showAlert(res.msg || "Conditions not met");
         }
     },
 
@@ -89,10 +109,15 @@ const App = {
 
     closeModal: () => {
         ui.closeWinModal();
+    },
+
+    closeAlert: () => {
+        ui.closeAlert();
     }
 };
 
 (window as any).game = App;
 (window as any).closeModal = App.closeModal;
+(window as any).closeAlert = App.closeAlert;
 
 App.init();

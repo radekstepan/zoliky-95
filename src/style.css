@@ -277,10 +277,9 @@ body {
     z-index: 10;
 }
 
-/* Unconfirmed Melds - Border removed per request */
+/* Unconfirmed Melds */
 .meld-group.pending {
-    /* border: 2px dashed yellow; REMOVED */
-    background: rgba(255, 255, 255, 0.15); /* Subtle highlight instead */
+    background: rgba(255, 255, 255, 0.15); 
 }
 
 /* Controls Bar at Bottom */

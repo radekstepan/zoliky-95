@@ -15,8 +15,13 @@ export class UIManager {
         btnMeld: document.getElementById('btn-meld') as HTMLButtonElement,
         btnCancel: document.getElementById('btn-cancel') as HTMLButtonElement,
         btnDiscard: document.getElementById('btn-discard') as HTMLButtonElement,
+        // Game Over Modal
         modal: document.getElementById('modal')!,
-        modalMsg: document.getElementById('modal-msg')!
+        modalMsg: document.getElementById('modal-msg')!,
+        // Alert Modal
+        alertModal: document.getElementById('alert-modal')!,
+        alertTitle: document.getElementById('alert-title')!,
+        alertMsg: document.getElementById('alert-msg')!
     };
 
     constructor(game: GameState) {
@@ -28,16 +33,11 @@ export class UIManager {
 
         this.ui.score.innerText = `Rd: ${round} | Pts: ${turnPoints}`;
 
-        // Stock & Bottom Card Visualization
-        // We'll use a pseudo-element or just inline HTML for bottom card if not handled by CSS
-        // Ideally, bottom card is visible under stock.
+        // Bottom Card Logic
         if (bottomCard) {
              this.ui.stock.style.boxShadow = "2px 2px 0 #fff, 4px 4px 0 #000"; 
              this.ui.stock.title = "Stock Pile";
-             // Render bottom card peeking out?
-             // For simplicity, we'll add a separate small div near stock in HTML or just let it be implicit,
-             // but rules say it's "showing".
-             // Let's set the background of the container to hint it, or create an element dynamically.
+             
              let bEl = document.getElementById('bottom-card-display');
              if(!bEl) {
                  bEl = document.createElement('div');
@@ -50,7 +50,6 @@ export class UIManager {
                  bEl.style.transform = 'rotate(5deg)';
                  bEl.innerHTML = this.renderCardInner(bottomCard);
                  this.ui.stock.parentElement?.appendChild(bEl);
-                 // Stock goes on top
                  this.ui.stock.style.zIndex = '5';
              }
         } else {
@@ -81,10 +80,9 @@ export class UIManager {
             this.ui.pHand.appendChild(el);
         });
         
-        // Jolly Hand Button Logic
+        // Jolly Hand Button
         let jhBtn = document.getElementById('btn-jolly');
         if (!jhBtn) {
-            // Add button dynamically if missing
             jhBtn = document.createElement('button');
             jhBtn.id = 'btn-jolly';
             jhBtn.className = 'win-btn';
@@ -127,7 +125,7 @@ export class UIManager {
         });
 
         const selectedCount = pHand.filter(c => c.selected).length;
-        this.ui.btnMeld.disabled = selectedCount < 1; // Enabled for 1 to allow adding/swapping
+        this.ui.btnMeld.disabled = selectedCount < 1; 
         this.ui.btnDiscard.disabled = selectedCount !== 1;
         
         if (turnMelds.length > 0 && !hasOpened.human) {
@@ -148,6 +146,16 @@ export class UIManager {
 
     public closeWinModal() {
         this.ui.modal.style.display = 'none';
+    }
+
+    public showAlert(msg: string, title: string = 'Alert') {
+        this.ui.alertTitle.innerText = title;
+        this.ui.alertMsg.innerText = msg;
+        this.ui.alertModal.style.display = 'flex';
+    }
+
+    public closeAlert() {
+        this.ui.alertModal.style.display = 'none';
     }
 
     private renderCardInner(c: ICard): string {
@@ -175,14 +183,12 @@ export class UIManager {
         const selected = this.game.pHand.filter(c => c.selected);
         if (selected.length === 0) return;
 
-        // If 1 card selected, check if it's a swap attempt
         if (selected.length === 1) {
             const res = this.game.attemptJokerSwap(meldIdx, selected[0].id);
             if (res.success) {
                 this.render();
                 return;
             }
-            // If swap failed, try regular add
         }
 
         const res = this.game.addToExistingMeld(meldIdx, selected);
@@ -190,7 +196,7 @@ export class UIManager {
             if (res.winner) this.showWinModal(`${res.winner} Wins!`);
             this.render();
         } else {
-            alert(res.msg);
+            this.showAlert(res.msg || "Invalid Move");
         }
     }
 
