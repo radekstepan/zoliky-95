@@ -2,6 +2,8 @@
 
 A retro Windows 95-styled implementation of the card game "Jolly" (similar to Rummy), built with TypeScript and Vite.
 
+![Gameplay Screenshot](./screenshot.png)
+
 ## Features
 
 - **Retro UI**: Authentic Windows 95 look and feel.

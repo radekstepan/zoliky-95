@@ -11,13 +11,14 @@ export class Card implements ICard {
         public readonly id: number
     ) {}
 
+    public representation?: { rank: Rank, suit: Suit };
+
     get isJoker(): boolean {
         return this.suit === JOKER_SUIT;
     }
 
     public selected: boolean = false;
 
-    // Context-free value (default). Contextual value (Ace low/high) handled in rules.ts
     public getValue(): number {
         if (this.isJoker) return 0; 
         if (['J', 'Q', 'K', 'A'].includes(this.rank)) return 10;

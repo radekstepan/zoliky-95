@@ -8,7 +8,7 @@ export interface MeldResult {
     valid: boolean;
     points: number;
     type?: 'set' | 'run';
-    isPure?: boolean; // True if run contains no jokers
+    isPure?: boolean; 
 }
 
 export interface ICard {
@@ -18,7 +18,10 @@ export interface ICard {
     readonly isJoker: boolean;
     selected: boolean;
     
-    getValue(): number; // Base value
+    // New property for Joker representation
+    representation?: { rank: Rank, suit: Suit };
+
+    getValue(): number; 
     getOrder(): number;
     getColor(): 'red' | 'black';
 }

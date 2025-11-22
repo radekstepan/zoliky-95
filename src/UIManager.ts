@@ -3,7 +3,7 @@ import { ICard } from "./types";
 
 export class UIManager {
     private game: GameState;
-    
+    // ... existing properties ...
     private ui = {
         stock: document.getElementById('stock-pile')!,
         discard: document.getElementById('discard-pile')!,
@@ -15,10 +15,8 @@ export class UIManager {
         btnMeld: document.getElementById('btn-meld') as HTMLButtonElement,
         btnCancel: document.getElementById('btn-cancel') as HTMLButtonElement,
         btnDiscard: document.getElementById('btn-discard') as HTMLButtonElement,
-        // Game Over Modal
         modal: document.getElementById('modal')!,
         modalMsg: document.getElementById('modal-msg')!,
-        // Alert Modal
         alertModal: document.getElementById('alert-modal')!,
         alertTitle: document.getElementById('alert-title')!,
         alertMsg: document.getElementById('alert-msg')!
@@ -36,7 +34,6 @@ export class UIManager {
         // Bottom Card Logic
         if (bottomCard) {
              this.ui.stock.style.boxShadow = "2px 2px 0 #fff, 4px 4px 0 #000"; 
-             this.ui.stock.title = "Stock Pile";
              
              let bEl = document.getElementById('bottom-card-display');
              if(!bEl) {
@@ -80,7 +77,7 @@ export class UIManager {
             this.ui.pHand.appendChild(el);
         });
         
-        // Jolly Hand Button
+        // Jolly Hand
         let jhBtn = document.getElementById('btn-jolly');
         if (!jhBtn) {
             jhBtn = document.createElement('button');
@@ -160,10 +157,15 @@ export class UIManager {
 
     private renderCardInner(c: ICard): string {
         if (c.isJoker) {
+            const rep = c.representation;
+            const topContent = rep ? `<span>${rep.rank}</span><span>${rep.suit}</span>` : `<span>🤡</span>`;
+            const botContent = rep ? `<span>${rep.rank}</span><span>${rep.suit}</span>` : `<span>🤡</span>`;
+            const style = rep ? 'color: gray; opacity: 0.7;' : '';
+
             return `
-                <div class="card-top"><span>🤡</span></div>
+                <div class="card-top" style="${style}">${topContent}</div>
                 <div class="card-center">🃏</div>
-                <div class="card-bottom"><span>🤡</span></div>
+                <div class="card-bottom" style="${style}">${botContent}</div>
             `;
         }
         return `
@@ -201,13 +203,11 @@ export class UIManager {
     }
 
     public animateDraw(card: ICard, source: 'stock' | 'discard', onComplete: () => void) {
+        // ... (Unchanged)
         const sourceEl = source === 'stock' ? this.ui.stock : this.ui.discard;
         const targetEl = this.ui.pHand.querySelector(`[data-id="${card.id}"]`) as HTMLElement;
-
-        if (!sourceEl || !targetEl) {
-            onComplete();
-            return;
-        }
+        if (!sourceEl || !targetEl) { onComplete(); return; }
+        
         targetEl.style.opacity = '0';
         const flyer = document.createElement('div');
         flyer.className = `card ${card.getColor()} flying-card`;
