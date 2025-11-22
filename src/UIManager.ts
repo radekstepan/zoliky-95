@@ -24,10 +24,39 @@ export class UIManager {
     }
 
     public render() {
-        const { round, turnPoints, discardPile, pHand, cHand, melds, turnMelds, hasOpened, turn } = this.game;
+        const { round, turnPoints, discardPile, pHand, cHand, melds, turnMelds, hasOpened, turn, bottomCard } = this.game;
 
-        // Stats
-        this.ui.score.innerText = `Rd: ${round} | Pts: ${turnPoints}/36`;
+        this.ui.score.innerText = `Rd: ${round} | Pts: ${turnPoints}`;
+
+        // Stock & Bottom Card Visualization
+        // We'll use a pseudo-element or just inline HTML for bottom card if not handled by CSS
+        // Ideally, bottom card is visible under stock.
+        if (bottomCard) {
+             this.ui.stock.style.boxShadow = "2px 2px 0 #fff, 4px 4px 0 #000"; 
+             this.ui.stock.title = "Stock Pile";
+             // Render bottom card peeking out?
+             // For simplicity, we'll add a separate small div near stock in HTML or just let it be implicit,
+             // but rules say it's "showing".
+             // Let's set the background of the container to hint it, or create an element dynamically.
+             let bEl = document.getElementById('bottom-card-display');
+             if(!bEl) {
+                 bEl = document.createElement('div');
+                 bEl.id = 'bottom-card-display';
+                 bEl.className = `card ${bottomCard.getColor()}`;
+                 bEl.style.position = 'absolute';
+                 bEl.style.top = '5px';
+                 bEl.style.left = '5px';
+                 bEl.style.zIndex = '0';
+                 bEl.style.transform = 'rotate(5deg)';
+                 bEl.innerHTML = this.renderCardInner(bottomCard);
+                 this.ui.stock.parentElement?.appendChild(bEl);
+                 // Stock goes on top
+                 this.ui.stock.style.zIndex = '5';
+             }
+        } else {
+             const bEl = document.getElementById('bottom-card-display');
+             if(bEl) bEl.remove();
+        }
 
         // Discard Pile
         if (discardPile.length > 0) {
@@ -51,6 +80,25 @@ export class UIManager {
             el.onclick = () => this.handleCardClick(c);
             this.ui.pHand.appendChild(el);
         });
+        
+        // Jolly Hand Button Logic
+        let jhBtn = document.getElementById('btn-jolly');
+        if (!jhBtn) {
+            // Add button dynamically if missing
+            jhBtn = document.createElement('button');
+            jhBtn.id = 'btn-jolly';
+            jhBtn.className = 'win-btn';
+            jhBtn.innerText = 'Take Jolly Hand';
+            jhBtn.style.marginLeft = '10px';
+            jhBtn.onclick = () => (window as any).game.attemptJolly();
+            this.ui.btnDiscard.parentElement?.appendChild(jhBtn);
+        }
+        
+        if (pHand.length === 12 && bottomCard && turn === 'human') {
+            jhBtn.style.display = 'inline-block';
+        } else {
+            jhBtn.style.display = 'none';
+        }
 
         // CPU Hand
         this.ui.cHand.innerHTML = '';
@@ -64,7 +112,6 @@ export class UIManager {
         this.ui.table.innerHTML = '';
         melds.forEach((meld, idx) => {
             const grp = document.createElement('div');
-            // Check if this meld is "pending" (in current turn, not yet opened)
             const isPending = turnMelds.includes(idx) && !hasOpened.human && turn === 'human';
             
             grp.className = `meld-group ${isPending ? 'pending' : ''}`;
@@ -79,12 +126,10 @@ export class UIManager {
             this.ui.table.appendChild(grp);
         });
 
-        // Buttons State
         const selectedCount = pHand.filter(c => c.selected).length;
-        this.ui.btnMeld.disabled = selectedCount === 0;
+        this.ui.btnMeld.disabled = selectedCount < 1; // Enabled for 1 to allow adding/swapping
         this.ui.btnDiscard.disabled = selectedCount !== 1;
         
-        // Cancel Button Visibility
         if (turnMelds.length > 0 && !hasOpened.human) {
             this.ui.btnCancel.style.display = 'block';
         } else {
@@ -104,8 +149,6 @@ export class UIManager {
     public closeWinModal() {
         this.ui.modal.style.display = 'none';
     }
-
-    // --- Internal DOM Helpers ---
 
     private renderCardInner(c: ICard): string {
         if (c.isJoker) {
@@ -132,18 +175,25 @@ export class UIManager {
         const selected = this.game.pHand.filter(c => c.selected);
         if (selected.length === 0) return;
 
+        // If 1 card selected, check if it's a swap attempt
+        if (selected.length === 1) {
+            const res = this.game.attemptJokerSwap(meldIdx, selected[0].id);
+            if (res.success) {
+                this.render();
+                return;
+            }
+            // If swap failed, try regular add
+        }
+
         const res = this.game.addToExistingMeld(meldIdx, selected);
         if (res.success) {
-            if (res.winner) {
-                this.showWinModal(`${res.winner} Wins!`);
-            }
+            if (res.winner) this.showWinModal(`${res.winner} Wins!`);
             this.render();
         } else {
             alert(res.msg);
         }
     }
 
-    // Animation for drawing
     public animateDraw(card: ICard, source: 'stock' | 'discard', onComplete: () => void) {
         const sourceEl = source === 'stock' ? this.ui.stock : this.ui.discard;
         const targetEl = this.ui.pHand.querySelector(`[data-id="${card.id}"]`) as HTMLElement;
@@ -152,29 +202,21 @@ export class UIManager {
             onComplete();
             return;
         }
-
-        // Temporarily hide the real card in hand
         targetEl.style.opacity = '0';
-
         const flyer = document.createElement('div');
         flyer.className = `card ${card.getColor()} flying-card`;
         flyer.innerHTML = this.renderCardInner(card);
-
         const sRect = sourceEl.getBoundingClientRect();
         flyer.style.left = sRect.left + 'px';
         flyer.style.top = sRect.top + 'px';
         flyer.style.width = sRect.width + 'px';
         flyer.style.height = sRect.height + 'px';
-
         document.body.appendChild(flyer);
-        // Force reflow
         flyer.offsetHeight;
-
         const tRect = targetEl.getBoundingClientRect();
         flyer.style.left = tRect.left + 'px';
         flyer.style.top = tRect.top + 'px';
         flyer.style.transform = 'scale(1.0)';
-
         setTimeout(() => {
             document.body.removeChild(flyer);
             targetEl.style.opacity = '1';

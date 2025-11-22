@@ -18,7 +18,7 @@ export class Deck {
                     this.cards.push(new Card(s, r, idCounter++));
                 }
             }
-            // 2 Jokers per deck
+            // 2 Jokers per deck -> Total 4 Jokers
             this.cards.push(new Card(JOKER_SUIT, 'Joker', idCounter++));
             this.cards.push(new Card(JOKER_SUIT, 'Joker', idCounter++));
         }
@@ -35,6 +35,17 @@ export class Deck {
     public draw(): Card | undefined {
         return this.cards.pop();
     }
+    
+    // For the "Bottom Card" rule
+    public peekBottom(): Card | undefined {
+        if (this.cards.length === 0) return undefined;
+        return this.cards[0];
+    }
+
+    // Used when setting up the game to move bottom card out
+    public removeBottom(): Card | undefined {
+        return this.cards.shift();
+    }
 
     public setCards(cards: Card[]): void {
         this.cards = cards;
@@ -42,5 +53,9 @@ export class Deck {
 
     public isEmpty(): boolean {
         return this.cards.length === 0;
+    }
+    
+    public getCount(): number {
+        return this.cards.length;
     }
 }

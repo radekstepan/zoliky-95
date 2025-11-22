@@ -8,6 +8,7 @@ export interface MeldResult {
     valid: boolean;
     points: number;
     type?: 'set' | 'run';
+    isPure?: boolean; // True if run contains no jokers
 }
 
 export interface ICard {
@@ -17,7 +18,7 @@ export interface ICard {
     readonly isJoker: boolean;
     selected: boolean;
     
-    getValue(): number;
+    getValue(): number; // Base value
     getOrder(): number;
     getColor(): 'red' | 'black';
 }

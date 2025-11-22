@@ -6,55 +6,79 @@ export interface AiMove {
     discardCard: ICard | null;
 }
 
-/**
- * Calculates the best move for the CPU.
- */
 export function calculateCpuMove(hand: ICard[], hasOpened: boolean): AiMove {
     const meldsToPlay: ICard[][] = [];
-    // Work on a copy so we don't mutate the actual hand during calculation
     let tempHand = [...hand];
 
+    // 1. Grouping
     const rankGroups: Record<string, ICard[]> = {};
+    const suitGroups: Record<string, ICard[]> = {};
     
-    // Group by Rank
     tempHand.forEach(c => {
-        if(c.isJoker) return;
-        if(!rankGroups[c.rank]) rankGroups[c.rank] = [];
+        if (c.isJoker) return;
+        if (!rankGroups[c.rank]) rankGroups[c.rank] = [];
         rankGroups[c.rank].push(c);
+        
+        if (!suitGroups[c.suit]) suitGroups[c.suit] = [];
+        suitGroups[c.suit].push(c);
     });
 
-    // Detect Sets
-    for (let r in rankGroups) {
-        if (rankGroups[r].length >= 3) {
-            const meldCards = rankGroups[r].slice(0, 3);
-            const val = validateMeld(meldCards);
-            
-            if (val.valid) {
-                // Opening Rule Check
-                if (!hasOpened) {
-                    if (val.points >= 36) {
-                        // Valid opening
-                        meldsToPlay.push(meldCards);
-                        tempHand = tempHand.filter(c => !meldCards.includes(c));
-                    }
-                } else {
-                    // Already opened, just play it
-                    meldsToPlay.push(meldCards);
-                    tempHand = tempHand.filter(c => !meldCards.includes(c));
+    // 2. Scan for Pure Runs (High Priority for Opening)
+    for (let s in suitGroups) {
+        const cards = suitGroups[s].sort((a, b) => a.getOrder() - b.getOrder());
+        if (cards.length >= 3) {
+            // Simple slider: check i, i+1, i+2
+            for (let i = 0; i <= cards.length - 3; i++) {
+                const sub = cards.slice(i, i + 3);
+                // Only take if pure (no jokers in suitGroups anyway) and valid
+                const val = validateMeld(sub);
+                if (val.valid && val.type === 'run') {
+                     meldsToPlay.push(sub);
+                     tempHand = tempHand.filter(c => !sub.includes(c));
+                     // Remove from groups to avoid double usage?
+                     // Re-filtering rankGroups is expensive, just check tempHand inclusion later
+                     i += 2; // Skip used
                 }
             }
         }
     }
 
-    // Discard Logic: Random for now (could be improved to discard high value or lonely cards)
-    let discardCard: ICard | null = null;
-    if (tempHand.length > 0) {
-        const discardIndex = Math.floor(Math.random() * tempHand.length);
-        discardCard = tempHand[discardIndex];
+    // 3. Scan for Sets
+    for (let r in rankGroups) {
+        // filtering out cards already used in Runs
+        const available = rankGroups[r].filter(c => tempHand.some(tc => tc.id === c.id));
+        
+        if (available.length >= 3) {
+            const meldCards = available.slice(0, 4);
+            const val = validateMeld(meldCards);
+            if (val.valid) {
+                meldsToPlay.push(meldCards);
+                tempHand = tempHand.filter(c => !meldCards.includes(c));
+            }
+        }
     }
 
-    return {
-        meldsToPlay,
-        discardCard
-    };
+    // Validation for Opening Rules
+    if (!hasOpened) {
+        let points = 0;
+        let hasPureRun = false;
+        meldsToPlay.forEach(m => {
+            const res = validateMeld(m);
+            points += res.points;
+            if (res.type === 'run' && res.isPure) hasPureRun = true;
+        });
+
+        if (points < 36 || !hasPureRun) {
+            return { meldsToPlay: [], discardCard: tempHand[0] || null };
+        }
+    }
+
+    // Discard
+    let discardCard: ICard | null = null;
+    if (tempHand.length > 0) {
+        tempHand.sort((a, b) => b.getValue() - a.getValue());
+        discardCard = tempHand[0];
+    }
+
+    return { meldsToPlay, discardCard };
 }

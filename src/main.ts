@@ -2,24 +2,19 @@ import { GameState } from "./GameState";
 import { UIManager } from "./UIManager";
 import "./style.css";
 
-// Initialize Core and View
 const game = new GameState();
 const ui = new UIManager(game);
-
-// Global Logic Handlers exposed for the HTML inline onclicks 
-// (Note: In a pure React/Vue app we wouldn't attach to window, but this matches the existing structure)
 
 const App = {
     init: () => {
         game.initGame();
         ui.render();
-        ui.updateStatus("Your turn. Draw a card.");
+        ui.updateStatus("Your turn. Discard a card to start.");
     },
 
     humanDraw: (source: 'stock' | 'discard') => {
         const res = game.drawCard(source);
         if (res.success && res.card) {
-            // Render first to create DOM element for animation
             ui.render(); 
             ui.animateDraw(res.card, source, () => {
                 let msg = "Meld cards or Discard to end turn.";
@@ -36,13 +31,9 @@ const App = {
         const res = game.attemptMeld(selected);
         
         if (res.success) {
-            if (game.pHand.length === 0) {
-                ui.showWinModal("Human Wins!");
-            } else {
-                ui.render();
-                if (!game.hasOpened.human) {
-                    ui.updateStatus(`Pending Opening Points: ${game.turnPoints}/36.`);
-                }
+            ui.render();
+            if (!game.hasOpened.human) {
+                ui.updateStatus(`Pending Opening. Need Pure Run + 36pts. Current: ${game.turnPoints}`);
             }
         } else {
             alert(res.msg);
@@ -59,7 +50,7 @@ const App = {
         const res = game.attemptDiscard(selected[0].id);
         if (res.success) {
             if (res.winner) {
-                ui.showWinModal(`${res.winner} Wins!`);
+                ui.showWinModal(`${res.winner} Wins! Opponent score: ${res.score}`);
                 return;
             }
             
@@ -69,12 +60,22 @@ const App = {
             setTimeout(() => {
                 const cpuRes = game.processCpuTurn();
                 if (cpuRes.winner) {
-                    ui.showWinModal(`${cpuRes.winner} Wins!`);
+                    ui.showWinModal(`${cpuRes.winner} Wins! You lose ${cpuRes.score} pts.`);
                 }
                 ui.render();
                 ui.updateStatus(`Round ${game.round}. Your turn.`);
             }, 1000);
 
+        } else {
+            alert(res.msg);
+        }
+    },
+
+    attemptJolly: () => {
+        const res = game.attemptJollyHand();
+        if(res.success) {
+            ui.render();
+            ui.updateStatus(res.msg || "Jolly Hand Active!");
         } else {
             alert(res.msg);
         }
@@ -91,9 +92,7 @@ const App = {
     }
 };
 
-// Attach to Window
 (window as any).game = App;
 (window as any).closeModal = App.closeModal;
 
-// Start
 App.init();

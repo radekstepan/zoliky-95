@@ -17,8 +17,9 @@ export class Card implements ICard {
 
     public selected: boolean = false;
 
+    // Context-free value (default). Contextual value (Ace low/high) handled in rules.ts
     public getValue(): number {
-        if (this.isJoker) return 0; // Contextual, handled in rules
+        if (this.isJoker) return 0; 
         if (['J', 'Q', 'K', 'A'].includes(this.rank)) return 10;
         return parseInt(this.rank, 10) || 0;
     }
