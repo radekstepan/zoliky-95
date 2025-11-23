@@ -18,7 +18,7 @@ export interface ICard {
     readonly isJoker: boolean;
     selected: boolean;
     
-    // New property for Joker representation
+    // For display and scoring: what card is this Joker mimicking?
     representation?: { rank: Rank, suit: Suit };
 
     getValue(): number; 

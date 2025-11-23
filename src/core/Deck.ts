@@ -36,13 +36,23 @@ export class Deck {
         return this.cards.pop();
     }
     
-    // For the "Bottom Card" rule
-    public peekBottom(): Card | undefined {
-        if (this.cards.length === 0) return undefined;
-        return this.cards[0];
+    // Rule: "Player checks bottom 3 cards. If he finds a Joker, he keeps it."
+    public checkBottomThreeForJokers(): Card[] {
+        const foundJokers: Card[] = [];
+        // Look at indices 0, 1, 2 (bottom of deck)
+        // We iterate backwards from 2 to 0 to splice safely
+        for (let i = 2; i >= 0; i--) {
+            if (i < this.cards.length) {
+                if (this.cards[i].isJoker) {
+                    const jokers = this.cards.splice(i, 1);
+                    foundJokers.push(jokers[0]);
+                }
+            }
+        }
+        return foundJokers;
     }
 
-    // Used when setting up the game to move bottom card out
+    // Used when setting up the game to move bottom card out (Jolly Card)
     public removeBottom(): Card | undefined {
         return this.cards.shift();
     }
@@ -53,9 +63,5 @@ export class Deck {
 
     public isEmpty(): boolean {
         return this.cards.length === 0;
-    }
-    
-    public getCount(): number {
-        return this.cards.length;
     }
 }

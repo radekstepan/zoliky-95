@@ -1,5 +1,4 @@
 import { Deck } from "./core/Deck";
-import { Card } from "./core/Card";
 import { ICard, TurnOwner, TurnPhase } from "./types";
 import { sortHandLogic, validateMeld, organizeMeld } from "./core/rules";
 import { calculateCpuMove } from "./core/ai";
@@ -39,20 +38,31 @@ export class GameState {
         this.round = 1;
         this.resetTurnState();
 
+        // Rule: "Player splits deck... looks at bottom 3. If Joker, keeps it."
+        const cutJokers = this.deck.checkBottomThreeForJokers();
+        if (cutJokers.length > 0) {
+            this.pHand.push(...cutJokers);
+        }
+
+        // Rule: "Bottom-most card turned face up"
         this.bottomCard = this.deck.removeBottom() || null;
 
-        for(let i=0; i<13; i++) {
-            const pc = this.deck.draw();
-            if(pc) this.pHand.push(pc);
+        // Deal cards
+        // Player (Left of Dealer) gets 13. Opponent gets 12.
+        // We adjust the loop to fill hands to target size.
+        while (this.pHand.length < 13) {
+            const c = this.deck.draw();
+            if(c) this.pHand.push(c);
         }
-        for(let i=0; i<12; i++) {
-            const cc = this.deck.draw();
-            if(cc) this.cHand.push(cc);
+        while (this.cHand.length < 12) {
+            const c = this.deck.draw();
+            if(c) this.cHand.push(c);
         }
 
         sortHandLogic(this.pHand);
         sortHandLogic(this.cHand);
 
+        // Player starts with 13 cards -> Action phase (must discard)
         this.turn = 'human';
         this.phase = 'action';
     }
@@ -73,7 +83,9 @@ export class GameState {
             card = this.deck.draw();
             if (!card) {
                 if (this.discardPile.length > 0) {
-                    this.deck.setCards([...this.discardPile].reverse() as Card[]);
+                    // Rule: Reshuffle discard pile into deck
+                    this.deck.setCards([...this.discardPile]);
+                    this.deck.shuffle();
                     this.discardPile = [];
                     card = this.deck.draw();
                 } else {
@@ -81,7 +93,7 @@ export class GameState {
                 }
             }
         } else {
-            // Rule: Cannot draw from discard until Round 3 (when melding is allowed)
+            // Rule: Cannot draw from discard until Round 3
             if (this.round < 3) {
                 return { success: false, msg: "Cannot draw from discard until Round 3." };
             }
@@ -104,7 +116,6 @@ export class GameState {
         return { success: true, card };
     }
 
-    // New: Allows undoing a discard draw if no actions taken yet
     public undoDraw(): { success: boolean; msg?: string } {
         if (this.phase !== 'action') return { success: false, msg: "Not in action phase." };
         if (!this.drawnFromDiscardId) return { success: false, msg: "Did not draw from discard." };
@@ -116,10 +127,8 @@ export class GameState {
         const card = this.pHand.splice(cardIdx, 1)[0];
         card.selected = false;
         
-        // Return to discard pile
         this.discardPile.push(card);
         
-        // Reset state
         this.drawnFromDiscardId = null;
         this.phase = 'draw';
         sortHandLogic(this.pHand);
@@ -131,13 +140,14 @@ export class GameState {
         if (this.round < 3) return { success: false, msg: `Cannot meld until Round 3.` };
         
         const result = validateMeld(selectedCards);
-        if (!result.valid) return { success: false, msg: "Invalid Meld. Check suits/ranks." };
+        if (!result.valid) return { success: false, msg: "Invalid Meld. Check suits/ranks/adjacency." };
 
         if (this.drawnFromDiscardId) {
             const used = selectedCards.some(c => c.id === this.drawnFromDiscardId);
             if (used) this.discardCardUsed = true;
         }
 
+        // Organize adds representations which are needed for UI
         const organized = organizeMeld(selectedCards);
 
         this.melds.push(organized);
@@ -157,12 +167,23 @@ export class GameState {
         const jokerIdx = meld.findIndex(c => c.isJoker);
         if (jokerIdx === -1) return { success: false, msg: "No Joker in selected meld." };
 
+        // Rule: Set Constraint - "Need all 4 kinds to take Joker"
+        const nonJokers = meld.filter(c => !c.isJoker);
+        const isSet = nonJokers.every(c => c.rank === nonJokers[0].rank);
+        
+        if (isSet) {
+            if (nonJokers.length < 3) {
+                return { success: false, msg: "Sets need 4 suits to swap Joker." };
+            }
+        }
+
         const handCard = this.pHand.find(c => c.id === handCardId);
         if (!handCard) return { success: false, msg: "Card not in hand." };
 
         const joker = meld[jokerIdx];
         meld[jokerIdx] = handCard; 
 
+        // Re-validate/Organize to ensure fit
         const organized = organizeMeld(meld);
         const res = validateMeld(organized);
         if (!res.valid) return { success: false, msg: "Card does not fit in meld." };
@@ -170,7 +191,9 @@ export class GameState {
         this.melds[meldIndex] = organized;
         this.pHand = this.pHand.filter(c => c.id !== handCardId);
         
+        // Return Joker to hand
         joker.representation = undefined;
+        joker.selected = false;
         this.pHand.push(joker); 
         
         sortHandLogic(this.pHand);

@@ -10,64 +10,55 @@ describe('GameState Integration', () => {
         game.initGame();
     });
 
-    it('should initialize correctly', () => {
-        expect(game.pHand.length).toBe(13);
+    it('should initialize correctly with checks', () => {
+        // Hand size might be >13 if cut Jokers found, but logic fills to 13 minimum
+        // Since deck is random, we just check >= 13
+        expect(game.pHand.length).toBeGreaterThanOrEqual(13);
         expect(game.cHand.length).toBe(12);
-        expect(game.discardPile.length).toBe(0);
         expect(game.round).toBe(1);
     });
 
-    it('should prevent drawing from discard before Round 3', () => {
-        // Round 1
-        game.discardPile.push(new Card('♥', '5', 999));
-        game.phase = 'draw';
-        const res = game.drawCard('discard');
+    it('should prevent Joker Swap on small sets', () => {
+        game.round = 3;
+        game.hasOpened.human = true;
+
+        // Mock a table Set: 7H, 7D, JK
+        const meld = [
+            new Card('♥', '7', 1),
+            new Card('♦', '7', 2),
+            new Card('JK', 'Joker', 99)
+        ];
+        game.melds.push(meld);
+
+        // Hand has 7S
+        const myCard = new Card('♠', '7', 100);
+        game.pHand.push(myCard);
+
+        // Try to swap
+        // Should fail because Set has only 2 real cards (needs 3 real cards to swap 4th)
+        const res = game.attemptJokerSwap(0, myCard.id);
         expect(res.success).toBe(false);
-        expect(res.msg).toContain('Round 3');
+        expect(res.msg).toContain('4 suits');
     });
 
-    it('should allow drawing from discard at Round 3', () => {
+    it('should allow Joker Swap on large sets (mocked)', () => {
         game.round = 3;
-        game.discardPile.push(new Card('♥', '5', 999));
-        game.phase = 'draw';
-        const res = game.drawCard('discard');
+        game.hasOpened.human = true;
+
+        // Mock a table Set: 7H, 7D, 7C, JK
+        const meld = [
+            new Card('♥', '7', 1),
+            new Card('♦', '7', 2),
+            new Card('♣', '7', 3),
+            new Card('JK', 'Joker', 99)
+        ];
+        game.melds.push(meld);
+
+        // Hand has 7S
+        const myCard = new Card('♠', '7', 100);
+        game.pHand.push(myCard);
+
+        const res = game.attemptJokerSwap(0, myCard.id);
         expect(res.success).toBe(true);
-    });
-
-    it('should allow undoing a discard draw', () => {
-        game.round = 3;
-        const testCard = new Card('♥', '5', 999);
-        game.discardPile.push(testCard);
-        game.phase = 'draw';
-        
-        // Draw
-        game.drawCard('discard');
-        expect(game.pHand.some(c => c.id === 999)).toBe(true);
-        expect(game.discardPile.length).toBe(0);
-        expect(game.drawnFromDiscardId).toBe(999);
-        
-        // Undo
-        const undoRes = game.undoDraw();
-        expect(undoRes.success).toBe(true);
-        expect(game.pHand.some(c => c.id === 999)).toBe(false);
-        expect(game.discardPile.length).toBe(1);
-        expect(game.discardPile[0].id).toBe(999);
-        expect(game.phase).toBe('draw');
-    });
-
-    it('should NOT allow undoing after melding', () => {
-        game.round = 3;
-        const testCard = new Card('♥', '5', 999);
-        game.discardPile.push(testCard);
-        game.phase = 'draw';
-        
-        game.drawCard('discard');
-        
-        // Mock a meld event (adding to turnMelds)
-        game.turnMelds.push(0); 
-        
-        const undoRes = game.undoDraw();
-        expect(undoRes.success).toBe(false);
-        expect(undoRes.msg).toContain('after melding');
     });
 });

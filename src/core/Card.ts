@@ -20,9 +20,12 @@ export class Card implements ICard {
 
     public selected: boolean = false;
 
+    // Static value (context-independent). 
+    // Note: Run scoring now handles dynamic values separately in rules.ts
     public getValue(): number {
         if (this.isJoker) return 0; 
-        if (['J', 'Q', 'K', 'A'].includes(this.rank)) return 10;
+        if (['J', 'Q', 'K'].includes(this.rank)) return 10;
+        if (this.rank === 'A') return 10; // Default high for sets/high-runs, adjusted in low-runs
         return parseInt(this.rank, 10) || 0;
     }
 
