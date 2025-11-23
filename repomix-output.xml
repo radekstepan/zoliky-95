@@ -1,0 +1,2780 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+public/
+  index.html
+src/
+  core/
+    ai.ts
+    Card.ts
+    Deck.ts
+    rules.ts
+  GameState.ts
+  main.js
+  main.ts
+  style.css
+  types.ts
+  UIManager.ts
+tests/
+  AI.test.ts
+  Card.test.ts
+  Deck.test.ts
+  GameState.test.ts
+  Rules.test.ts
+.gitignore
+.infisical.json
+.nvmrc
+index.html
+netlify.toml
+package.json
+README.md
+screenshot.png
+tsconfig.json
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="src/main.js">
+/* Žolíky / Rummy Game Logic
+   - 2 Decks (108 cards)
+   - Opening Meld: 36 Points (multiple melds allowed)
+   - Melding starts Round 3
+*/
+
+const SUITS = ['♥', '♦', '♣', '♠'];
+const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+const JOKER = 'JK';
+
+class Card {
+    constructor(suit, rank, id) {
+        this.suit = suit;
+        this.rank = rank;
+        this.id = id;
+        this.isJoker = (suit === JOKER);
+        this.selected = false;
+    }
+
+    getValue(isSequence = false) {
+        if (this.isJoker) return 0; // Joker value is contextual
+        if (['J', 'Q', 'K', 'A'].includes(this.rank)) return 10;
+        return parseInt(this.rank);
+    }
+
+    getOrder() {
+        if (this.isJoker) return 99;
+        return RANKS.indexOf(this.rank);
+    }
+
+    getColor() {
+        return (this.suit === '♥' || this.suit === '♦') ? 'red' : 'black';
+    }
+}
+
+class Deck {
+    constructor() {
+        this.cards = [];
+        this.init();
+    }
+
+    init() {
+        this.cards = [];
+        let idCounter = 0;
+        // Two standard decks
+        for (let d = 0; d < 2; d++) {
+            for (let s of SUITS) {
+                for (let r of RANKS) {
+                    this.cards.push(new Card(s, r, idCounter++));
+                }
+            }
+            // 2 Jokers per deck
+            this.cards.push(new Card(JOKER, 'Joker', idCounter++));
+            this.cards.push(new Card(JOKER, 'Joker', idCounter++));
+        }
+        this.shuffle();
+    }
+
+    shuffle() {
+        for (let i = this.cards.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [this.cards[i], this.cards[j]] = [this.cards[j], this.cards[i]];
+        }
+    }
+
+    draw() {
+        return this.cards.pop();
+    }
+}
+
+class Game {
+    constructor() {
+        this.deck = null;
+        this.pHand = [];
+        this.cHand = [];
+        this.melds = []; 
+        this.discardPile = [];
+        
+        this.turn = 'human';
+        this.phase = 'draw';
+        this.hasOpened = { human: false, cpu: false };
+        this.round = 1;
+        
+        // New State Variables for Rules
+        this.turnMelds = []; // Track indices of melds added this turn (for cancellation)
+        this.turnPoints = 0; // Track points accumulated this turn
+        this.drawnFromDiscardId = null; // Track if user picked from discard
+        this.discardCardUsed = false; // Track if that card was melded
+        
+        this.ui = {
+            stock: document.getElementById('stock-pile'),
+            discard: document.getElementById('discard-pile'),
+            pHand: document.getElementById('player-hand'),
+            cHand: document.getElementById('cpu-hand'),
+            table: document.getElementById('table-zone'),
+            status: document.getElementById('status-text'),
+            score: document.getElementById('score-text'),
+            btnMeld: document.getElementById('btn-meld'),
+            btnCancel: document.getElementById('btn-cancel'),
+            btnDiscard: document.getElementById('btn-discard'),
+            modal: document.getElementById('modal'),
+            modalMsg: document.getElementById('modal-msg')
+        };
+    }
+
+    init() {
+        this.deck = new Deck();
+        this.pHand = [];
+        this.cHand = [];
+        this.melds = [];
+        this.discardPile = [];
+        this.hasOpened = { human: false, cpu: false };
+        this.round = 1;
+        this.resetTurnState();
+
+        // Deal 12 cards each
+        for(let i=0; i<12; i++) {
+            this.pHand.push(this.deck.draw());
+            this.cHand.push(this.deck.draw());
+        }
+
+        this.sortHandLogic(this.pHand);
+        this.sortHandLogic(this.cHand);
+
+        this.discardPile.push(this.deck.draw());
+
+        this.turn = 'human';
+        this.phase = 'draw';
+        
+        this.render();
+        this.updateStatus("Your turn. Draw a card.");
+    }
+
+    resetTurnState() {
+        this.turnMelds = [];
+        this.turnPoints = 0;
+        this.drawnFromDiscardId = null;
+        this.discardCardUsed = false;
+    }
+
+    // --- Core Logic ---
+
+    humanDraw(source) {
+        if (this.turn !== 'human' || this.phase !== 'draw') return;
+
+        let card;
+        if (source === 'stock') {
+            card = this.deck.draw();
+            if (!card) {
+                if (this.discardPile.length > 0) {
+                    const top = this.discardPile.pop();
+                    this.deck.cards = [...this.discardPile];
+                    this.deck.shuffle();
+                    this.discardPile = [top];
+                    card = this.deck.draw();
+                } else {
+                    this.endGame("Draw - Deck Empty");
+                    return;
+                }
+            }
+        } else {
+            // Draw from discard
+            if (this.discardPile.length === 0) return;
+            card = this.discardPile.pop();
+            this.drawnFromDiscardId = card.id; // Track this specific card
+        }
+
+        this.pHand.push(card);
+        this.sortHandLogic(this.pHand); 
+
+        this.render();
+
+        const targetEl = this.ui.pHand.querySelector(`[data-id="${card.id}"]`);
+
+        if (targetEl) {
+            targetEl.style.opacity = '0';
+            this.animateDraw(card, source, targetEl, () => {
+                targetEl.style.opacity = '1';
+                this.phase = 'action';
+                let msg = "Meld cards or Discard to end turn.";
+                if (this.drawnFromDiscardId) msg = "You drew from discard. You MUST meld this card!";
+                this.updateStatus(msg);
+            });
+        } else {
+            this.phase = 'action';
+            this.render();
+        }
+    }
+
+    animateDraw(card, sourceName, targetEl, onComplete) {
+        const sourceEl = document.getElementById(sourceName === 'stock' ? 'stock-pile' : 'discard-pile');
+        
+        if (!sourceEl || !targetEl) {
+            onComplete();
+            return;
+        }
+
+        const flyer = document.createElement('div');
+        flyer.className = `card ${card.getColor()} flying-card`;
+        flyer.innerHTML = this.renderCardInner(card);
+
+        const sRect = sourceEl.getBoundingClientRect();
+        flyer.style.left = sRect.left + 'px';
+        flyer.style.top = sRect.top + 'px';
+        flyer.style.width = sRect.width + 'px';
+        flyer.style.height = sRect.height + 'px';
+
+        document.body.appendChild(flyer);
+        flyer.offsetHeight;
+
+        const tRect = targetEl.getBoundingClientRect();
+        flyer.style.left = tRect.left + 'px';
+        flyer.style.top = tRect.top + 'px';
+        flyer.style.transform = 'scale(1.0)';
+
+        setTimeout(() => {
+            document.body.removeChild(flyer);
+            onComplete();
+        }, 500);
+    }
+
+    humanMeld() {
+        if (this.turn !== 'human' || this.phase !== 'action') return;
+        
+        // Rule: Round 3 Requirement
+        if (this.round < 3) {
+            alert(`You cannot meld until Round 3. Current Round: ${this.round}`);
+            return;
+        }
+
+        const selected = this.pHand.filter(c => c.selected);
+        if (selected.length < 3) {
+            alert("A meld must have at least 3 cards.");
+            return;
+        }
+
+        const validation = this.validateMeld(selected);
+        
+        if (validation.valid) {
+            // Check if Discard Card is used
+            if (this.drawnFromDiscardId) {
+                const usedDiscard = selected.some(c => c.id === this.drawnFromDiscardId);
+                if (usedDiscard) this.discardCardUsed = true;
+            }
+
+            // Add to board
+            this.melds.push(selected);
+            this.turnMelds.push(this.melds.length - 1); // Track index for cancelling
+            this.turnPoints += validation.points; // Track points for opening
+
+            this.pHand = this.pHand.filter(c => !c.selected);
+            
+            // Check Win
+            if (this.pHand.length === 0) {
+                // If they go out, opening rules technically met if score is valid or they are finishing
+                if (!this.hasOpened.human && this.turnPoints < 36) {
+                    // Edge case: Going out without opening? Allowed if total > 36.
+                    // For simplicity, enforce 36.
+                    alert(`Opening total must be 36+. Current: ${this.turnPoints}`);
+                    this.cancelMelds(); // Force reset
+                    return;
+                }
+                this.endGame("Human Wins!");
+                return;
+            }
+
+            this.render();
+            
+            if (!this.hasOpened.human) {
+                this.updateStatus(`Pending Opening Points: ${this.turnPoints}/36.`);
+            }
+
+        } else {
+            alert("Invalid Meld. Must be a Set (same rank) or Run (sequence same suit).");
+        }
+    }
+    
+    cancelMelds() {
+        if (this.turnMelds.length === 0) return;
+        
+        // Reverse order to remove from end
+        for (let i = this.turnMelds.length - 1; i >= 0; i--) {
+            const meldIdx = this.turnMelds[i];
+            const meldCards = this.melds[meldIdx];
+            
+            // Return to hand
+            this.pHand.push(...meldCards);
+            
+            // Mark as null in melds array (to keep indices valid if we had complex logic, 
+            // but here we can just splice if we are careful. 
+            // Simplest: remove from melds array. Since we push to end, we can pop.)
+            this.melds.splice(meldIdx, 1);
+        }
+        
+        this.turnMelds = [];
+        this.turnPoints = 0;
+        this.discardCardUsed = false; // Reset usage
+        
+        this.sortHandLogic(this.pHand);
+        this.pHand.forEach(c => c.selected = false);
+        this.render();
+        this.updateStatus("Melds cancelled. Cards returned to hand.");
+    }
+
+    humanDiscard() {
+        if (this.turn !== 'human' || this.phase !== 'action') return;
+
+        // Rule: Verify Opening Score
+        if (!this.hasOpened.human) {
+            if (this.turnMelds.length > 0) {
+                if (this.turnPoints < 36) {
+                    alert(`Opening melds must sum to 36 points. You have ${this.turnPoints}. Please add more melds or Cancel.`);
+                    return;
+                }
+                // Success - Opened
+                this.hasOpened.human = true;
+                this.turnMelds = []; // Commit them
+            }
+        }
+
+        // Rule: Verify Discard Pickup Usage
+        if (this.drawnFromDiscardId && !this.discardCardUsed) {
+            alert("You picked up from the discard pile. You MUST use that card in a meld before discarding.");
+            return;
+        }
+
+        const selected = this.pHand.filter(c => c.selected);
+        if (selected.length !== 1) {
+            alert("Select exactly one card to discard.");
+            return;
+        }
+
+        const card = selected[0];
+        card.selected = false;
+        
+        // Prevent discarding the card you just picked from discard?
+        // Rule check: "must use in meld". If they used it, they don't have it.
+        // If they didn't use it, we blocked above. 
+        // So this is safe.
+
+        this.pHand = this.pHand.filter(c => c.id !== card.id);
+        this.discardPile.push(card);
+
+        if (this.pHand.length === 0) {
+            this.endGame("Human Wins!");
+            return;
+        }
+
+        this.turn = 'cpu';
+        this.phase = 'draw';
+        this.resetTurnState(); // Clear tracking for next turn
+        this.render();
+        this.updateStatus("CPU is thinking...");
+        
+        setTimeout(() => this.cpuTurn(), 1000);
+    }
+
+    addToMeld(meldIndex) {
+        if (this.turn !== 'human' || this.phase !== 'action') return;
+        
+        // Cannot add to melds if you haven't opened OR if you are currently opening (pending state)
+        // If pending opening, you should only create new melds usually. 
+        // But if you opened PREVIOUS turns, you can add.
+        if (!this.hasOpened.human) {
+            alert("You must open (play melds totaling 36+ points) before adding to existing melds.");
+            return;
+        }
+        
+        // If we are currently opening (turnMelds > 0), allows adding to *opponent's* melds?
+        // Usually you can't add to opponent until you open. 
+        // Logic handles above.
+
+        const selected = this.pHand.filter(c => c.selected);
+        if (selected.length === 0) return;
+
+        const targetMeld = [...this.melds[meldIndex]];
+        const newCandidates = [...targetMeld, ...selected];
+        
+        const validation = this.validateMeld(newCandidates);
+        if (validation.valid) {
+            
+            // Check discard usage
+            if (this.drawnFromDiscardId) {
+                const usedDiscard = selected.some(c => c.id === this.drawnFromDiscardId);
+                if (usedDiscard) this.discardCardUsed = true;
+            }
+
+            this.melds[meldIndex] = newCandidates;
+            this.pHand = this.pHand.filter(c => !c.selected); 
+            this.render();
+            
+            if (this.pHand.length === 0) this.endGame("Human Wins!");
+        } else {
+            alert("Cannot add these cards to that meld.");
+        }
+    }
+
+    sortHand() {
+        this.sortHandLogic(this.pHand);
+        this.render();
+    }
+
+    sortHandLogic(hand) {
+        hand.sort((a, b) => {
+            if (a.suit === b.suit) return a.getOrder() - b.getOrder();
+            return a.suit.localeCompare(b.suit);
+        });
+    }
+
+    // --- Validation Logic ---
+
+    validateMeld(cards) {
+        const jokerCount = cards.filter(c => c.isJoker).length;
+        const nonJokers = cards.filter(c => !c.isJoker);
+        
+        if (nonJokers.length === 0) return { valid: false, points: 0 }; 
+        
+        // 1. Check for Set
+        const firstRank = nonJokers[0].rank;
+        const isSet = nonJokers.every(c => c.rank === firstRank);
+        
+        if (isSet && cards.length >= 3) {
+            let val = nonJokers[0].getValue();
+            return { valid: true, points: val * cards.length, type: 'set' };
+        }
+
+        // 2. Check for Run
+        const firstSuit = nonJokers[0].suit;
+        const isSameSuit = nonJokers.every(c => c.suit === firstSuit);
+        
+        if (isSameSuit && cards.length >= 3) {
+            const sorted = [...nonJokers].sort((a, b) => a.getOrder() - b.getOrder());
+            
+            let gaps = 0;
+            for (let i = 0; i < sorted.length - 1; i++) {
+                const diff = sorted[i+1].getOrder() - sorted[i].getOrder();
+                if (diff < 1) return { valid: false }; 
+                gaps += (diff - 1);
+            }
+            
+            if (gaps <= jokerCount) {
+                let sum = nonJokers.reduce((acc, c) => acc + c.getValue(), 0);
+                sum += (jokerCount * 10);
+                return { valid: true, points: sum, type: 'run' };
+            }
+        }
+
+        return { valid: false, points: 0 };
+    }
+
+    // --- CPU Logic ---
+
+    cpuTurn() {
+        let card = this.deck.draw();
+        if(!card) {
+             if(this.discardPile.length > 1) {
+                 this.deck.cards = this.discardPile.slice(0, this.discardPile.length-1);
+                 this.discardPile = [this.discardPile[this.discardPile.length-1]];
+                 this.deck.shuffle();
+                 card = this.deck.draw();
+             } else {
+                 this.endGame("Draw - Deck Empty");
+                 return;
+             }
+        }
+        if(card) this.cHand.push(card);
+
+        this.sortHandLogic(this.cHand);
+
+        // Simple CPU AI
+        let played = false;
+        
+        // Only meld if Round >= 3
+        if (this.round >= 3) {
+            const rankGroups = {};
+            this.cHand.forEach(c => {
+                if(c.isJoker) return;
+                if(!rankGroups[c.rank]) rankGroups[c.rank] = [];
+                rankGroups[c.rank].push(c);
+            });
+
+            for (let r in rankGroups) {
+                if (rankGroups[r].length >= 3) {
+                    const meldCards = rankGroups[r].slice(0, 3);
+                    const val = this.validateMeld(meldCards);
+                    
+                    // Opening Check (36 points)
+                    if (!this.hasOpened.cpu) {
+                        if (val.points >= 36) {
+                            this.hasOpened.cpu = true;
+                        } else {
+                            continue;
+                        }
+                    }
+
+                    this.melds.push(meldCards);
+                    this.cHand = this.cHand.filter(c => !meldCards.includes(c));
+                    played = true;
+                    break;
+                }
+            }
+        }
+
+        // Discard
+        if (this.cHand.length > 0) {
+            const discardIndex = Math.floor(Math.random() * this.cHand.length);
+            const disc = this.cHand.splice(discardIndex, 1)[0];
+            this.discardPile.push(disc);
+        }
+
+        if (this.cHand.length === 0) {
+            this.endGame("CPU Wins!");
+            return;
+        }
+
+        // End of full round (Human + CPU played)
+        // Note: Logic says Round increments after both played? 
+        // Or simply every time CPU finishes, it's a new opportunity for Human.
+        // Let's increment round here.
+        this.round++; 
+
+        this.turn = 'human';
+        this.phase = 'draw';
+        this.render();
+        this.updateStatus(`Round ${this.round}. Your turn.`);
+    }
+
+    // --- Rendering ---
+
+    render() {
+        // Stats
+        this.ui.score.innerText = `Rd: ${this.round} | Pts: ${this.turnPoints}/36`;
+
+        // Discard Pile
+        if (this.discardPile.length > 0) {
+            const top = this.discardPile[this.discardPile.length - 1];
+            this.ui.discard.innerHTML = this.renderCardInner(top);
+            this.ui.discard.className = `card ${top.getColor()}`;
+            this.ui.discard.style.opacity = "1";
+        } else {
+            this.ui.discard.innerHTML = "";
+            this.ui.discard.className = "card";
+            this.ui.discard.style.opacity = "0.5";
+        }
+
+        // Player Hand
+        this.ui.pHand.innerHTML = '';
+        this.pHand.forEach(c => {
+            const el = document.createElement('div');
+            el.className = `card ${c.getColor()} ${c.selected ? 'selected' : ''}`;
+            el.dataset.id = c.id; 
+            el.innerHTML = this.renderCardInner(c);
+            el.onclick = () => this.toggleSelect(c);
+            this.ui.pHand.appendChild(el);
+        });
+
+        // CPU Hand
+        this.ui.cHand.innerHTML = '';
+        this.cHand.forEach(c => {
+            const el = document.createElement('div');
+            el.className = `card card-back`; 
+            this.ui.cHand.appendChild(el);
+        });
+
+        // Table
+        this.ui.table.innerHTML = '';
+        this.melds.forEach((meld, idx) => {
+            const grp = document.createElement('div');
+            // Check if this meld is "pending" (in current turn, not yet opened)
+            const isPending = this.turnMelds.includes(idx) && !this.hasOpened.human && this.turn === 'human';
+            
+            grp.className = `meld-group ${isPending ? 'pending' : ''}`;
+            grp.onclick = () => this.addToMeld(idx);
+            
+            meld.forEach(c => {
+                const el = document.createElement('div');
+                el.className = `card ${c.getColor()}`;
+                el.innerHTML = this.renderCardInner(c);
+                grp.appendChild(el);
+            });
+            this.ui.table.appendChild(grp);
+        });
+
+        // Buttons
+        const hasSelected = this.pHand.some(c => c.selected);
+        this.ui.btnMeld.disabled = !hasSelected;
+        this.ui.btnDiscard.disabled = (this.pHand.filter(c => c.selected).length !== 1);
+        
+        // Cancel Button
+        if (this.turnMelds.length > 0 && !this.hasOpened.human) {
+            this.ui.btnCancel.style.display = 'block';
+        } else {
+            this.ui.btnCancel.style.display = 'none';
+        }
+    }
+
+    renderCardInner(c) {
+        if (c.isJoker) {
+            return `
+                <div class="card-top"><span>🤡</span></div>
+                <div class="card-center">🃏</div>
+                <div class="card-bottom"><span>🤡</span></div>
+            `;
+        }
+        return `
+            <div class="card-top"><span>${c.rank}</span><span>${c.suit}</span></div>
+            <div class="card-center">${c.suit}</div>
+            <div class="card-bottom"><span>${c.rank}</span><span>${c.suit}</span></div>
+        `;
+    }
+
+    toggleSelect(card) {
+        if (this.turn !== 'human' || this.phase !== 'action') return;
+        card.selected = !card.selected;
+        this.render();
+    }
+
+    updateStatus(msg) {
+        this.ui.status.innerText = msg;
+    }
+
+    endGame(winner) {
+        this.ui.modalMsg.innerText = winner;
+        this.ui.modal.style.display = 'flex';
+    }
+}
+
+function closeModal() {
+    document.getElementById('modal').style.display = 'none';
+}
+
+// Start
+const game = new Game();
+// Attach to window so HTML inline click handlers work
+window.game = game;
+window.closeModal = closeModal;
+
+game.init();
+</file>
+
+<file path="tests/AI.test.ts">
+import { describe, it, expect } from 'vitest';
+import { calculateCpuMove } from '../src/core/ai';
+import { Card } from '../src/core/Card';
+
+describe('AI Logic', () => {
+    it('should find a valid set in hand', () => {
+        const hand = [
+            new Card('♥', 'K', 1),
+            new Card('♠', 'K', 2),
+            new Card('♣', 'K', 3),
+            new Card('♥', '2', 4)
+        ];
+        const move = calculateCpuMove(hand, true);
+        expect(move.meldsToPlay.length).toBeGreaterThan(0);
+    });
+
+    it('should respect opening points constraint', () => {
+        const hand = [
+            new Card('♥', '2', 1),
+            new Card('♠', '2', 2),
+            new Card('♣', '2', 3), 
+            new Card('♥', 'A', 4)
+        ];
+        const move = calculateCpuMove(hand, false);
+        expect(move.meldsToPlay.length).toBe(0);
+    });
+
+    it('should calculate opening if points and pure run are sufficient', () => {
+        const hand = [
+            new Card('♥', 'Q', 1),
+            new Card('♥', 'K', 2),
+            new Card('♥', 'A', 3), // Pure Run (30pts)
+            new Card('♠', '5', 4),
+            new Card('♣', '5', 5),
+            new Card('♦', '5', 6)  // Set (15pts) -> Total 45
+        ];
+
+        const move = calculateCpuMove(hand, false);
+        
+        // Now that AI scans for runs, this should succeed
+        expect(move.meldsToPlay.length).toBeGreaterThan(0);
+        const hasRun = move.meldsToPlay.some(m => m[0].suit === m[1].suit);
+        expect(hasRun).toBe(true);
+    });
+});
+</file>
+
+<file path="tests/Card.test.ts">
+import { describe, it, expect } from 'vitest';
+import { Card } from '../src/core/Card';
+
+describe('Card Logic', () => {
+    it('should correctly identify color', () => {
+        const heart = new Card('♥', 'A', 1);
+        const club = new Card('♣', 'A', 2);
+        
+        expect(heart.getColor()).toBe('red');
+        expect(club.getColor()).toBe('black');
+    });
+
+    it('should return correct value for standard ranks', () => {
+        const five = new Card('♥', '5', 1);
+        expect(five.getValue()).toBe(5);
+
+        const ten = new Card('♥', '10', 2);
+        expect(ten.getValue()).toBe(10);
+    });
+
+    it('should return 10 for face cards', () => {
+        const jack = new Card('♥', 'J', 1);
+        const king = new Card('♥', 'K', 2);
+        
+        expect(jack.getValue()).toBe(10);
+        expect(king.getValue()).toBe(10);
+    });
+
+    it('should identify Jokers', () => {
+        const joker = new Card('JK', 'Joker', 99);
+        expect(joker.isJoker).toBe(true);
+        expect(joker.getValue()).toBe(0); // Context dependent
+    });
+});
+</file>
+
+<file path="tests/Deck.test.ts">
+import { describe, it, expect } from 'vitest';
+import { Deck } from '../src/core/Deck';
+
+describe('Deck Logic', () => {
+    it('should initialize with 108 cards', () => {
+        const deck = new Deck();
+        // 2 decks: 52 * 2 = 104 + 4 jokers = 108
+        // Logic inside deck might vary slightly on implementation access, 
+        // but we can test by drawing all.
+        let count = 0;
+        while(deck.draw()) {
+            count++;
+        }
+        expect(count).toBe(108);
+    });
+
+    it('should handle empty deck', () => {
+        const deck = new Deck();
+        while(deck.draw()) {} // empty it
+        expect(deck.draw()).toBeUndefined();
+        expect(deck.isEmpty()).toBe(true);
+    });
+});
+</file>
+
+<file path=".gitignore">
+node_modules
+dist
+.DS_Store
+*.local
+</file>
+
+<file path=".infisical.json">
+{
+    "workspaceId": "bb7e17c0-7715-45f6-a97d-4c78592c4ad9",
+    "defaultEnvironment": "",
+    "gitBranchToEnvironmentMapping": null
+}
+</file>
+
+<file path=".nvmrc">
+23.10.0
+</file>
+
+<file path="netlify.toml">
+[build]
+  command = "yarn build"
+  publish = "dist"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+</file>
+
+<file path="tsconfig.json">
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "lib": [
+      "ES2020",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": [
+    "src"
+  ]
+}
+</file>
+
+<file path="src/core/ai.ts">
+import { ICard } from "../types";
+import { validateMeld } from "./rules";
+
+export interface AiMove {
+    meldsToPlay: ICard[][];
+    discardCard: ICard | null;
+}
+
+export function calculateCpuMove(hand: ICard[], hasOpened: boolean): AiMove {
+    const meldsToPlay: ICard[][] = [];
+    let tempHand = [...hand];
+
+    // 1. Grouping
+    const rankGroups: Record<string, ICard[]> = {};
+    const suitGroups: Record<string, ICard[]> = {};
+    
+    tempHand.forEach(c => {
+        if (c.isJoker) return;
+        if (!rankGroups[c.rank]) rankGroups[c.rank] = [];
+        rankGroups[c.rank].push(c);
+        
+        if (!suitGroups[c.suit]) suitGroups[c.suit] = [];
+        suitGroups[c.suit].push(c);
+    });
+
+    // 2. Scan for Pure Runs (High Priority for Opening)
+    for (let s in suitGroups) {
+        const cards = suitGroups[s].sort((a, b) => a.getOrder() - b.getOrder());
+        if (cards.length >= 3) {
+            // Simple slider: check i, i+1, i+2
+            for (let i = 0; i <= cards.length - 3; i++) {
+                const sub = cards.slice(i, i + 3);
+                // Only take if pure (no jokers in suitGroups anyway) and valid
+                const val = validateMeld(sub);
+                if (val.valid && val.type === 'run') {
+                     meldsToPlay.push(sub);
+                     tempHand = tempHand.filter(c => !sub.includes(c));
+                     // Remove from groups to avoid double usage?
+                     // Re-filtering rankGroups is expensive, just check tempHand inclusion later
+                     i += 2; // Skip used
+                }
+            }
+        }
+    }
+
+    // 3. Scan for Sets
+    for (let r in rankGroups) {
+        // filtering out cards already used in Runs
+        const available = rankGroups[r].filter(c => tempHand.some(tc => tc.id === c.id));
+        
+        if (available.length >= 3) {
+            const meldCards = available.slice(0, 4);
+            const val = validateMeld(meldCards);
+            if (val.valid) {
+                meldsToPlay.push(meldCards);
+                tempHand = tempHand.filter(c => !meldCards.includes(c));
+            }
+        }
+    }
+
+    // Validation for Opening Rules
+    if (!hasOpened) {
+        let points = 0;
+        let hasPureRun = false;
+        meldsToPlay.forEach(m => {
+            const res = validateMeld(m);
+            points += res.points;
+            if (res.type === 'run' && res.isPure) hasPureRun = true;
+        });
+
+        if (points < 36 || !hasPureRun) {
+            return { meldsToPlay: [], discardCard: tempHand[0] || null };
+        }
+    }
+
+    // Discard
+    let discardCard: ICard | null = null;
+    if (tempHand.length > 0) {
+        tempHand.sort((a, b) => b.getValue() - a.getValue());
+        discardCard = tempHand[0];
+    }
+
+    return { meldsToPlay, discardCard };
+}
+</file>
+
+<file path="src/core/Deck.ts">
+import { Card, RANKS, SUITS, JOKER_SUIT } from "./Card";
+
+export class Deck {
+    private cards: Card[] = [];
+
+    constructor() {
+        this.init();
+    }
+
+    public init(): void {
+        this.cards = [];
+        let idCounter = 0;
+        // Two standard decks
+        for (let d = 0; d < 2; d++) {
+            for (let s of SUITS) {
+                if (s === JOKER_SUIT) continue;
+                for (let r of RANKS) {
+                    this.cards.push(new Card(s, r, idCounter++));
+                }
+            }
+            // 2 Jokers per deck -> Total 4 Jokers
+            this.cards.push(new Card(JOKER_SUIT, 'Joker', idCounter++));
+            this.cards.push(new Card(JOKER_SUIT, 'Joker', idCounter++));
+        }
+        this.shuffle();
+    }
+
+    public shuffle(): void {
+        for (let i = this.cards.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [this.cards[i], this.cards[j]] = [this.cards[j], this.cards[i]];
+        }
+    }
+
+    public draw(): Card | undefined {
+        return this.cards.pop();
+    }
+    
+    // For the "Bottom Card" rule
+    public peekBottom(): Card | undefined {
+        if (this.cards.length === 0) return undefined;
+        return this.cards[0];
+    }
+
+    // Used when setting up the game to move bottom card out
+    public removeBottom(): Card | undefined {
+        return this.cards.shift();
+    }
+
+    public setCards(cards: Card[]): void {
+        this.cards = cards;
+    }
+
+    public isEmpty(): boolean {
+        return this.cards.length === 0;
+    }
+    
+    public getCount(): number {
+        return this.cards.length;
+    }
+}
+</file>
+
+<file path="src/style.css">
+/* --- Windows 95 Design System --- */
+:root {
+    --win-gray: #c0c0c0;
+    --win-dark: #808080;
+    --win-darker: #404040;
+    --win-light: #ffffff;
+    --win-blue: #000080;
+    --win-teal: #008080;
+    --card-width: 70px;
+    --card-height: 100px;
+    --felt-green: #006400;
+}
+
+@font-face {
+    font-family: 'PixelSans';
+    src: local('MS Sans Serif'), local('Arial'); 
+    /* Fallback to Arial, aiming for system sans-serif look */
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--win-teal);
+    font-family: 'PixelSans', sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    user-select: none;
+}
+
+/* Retro Window Container */
+.window {
+    width: 95vw;
+    height: 90vh;
+    background-color: var(--win-gray);
+    border-top: 2px solid var(--win-light);
+    border-left: 2px solid var(--win-light);
+    border-right: 2px solid var(--win-darker);
+    border-bottom: 2px solid var(--win-darker);
+    display: flex;
+    flex-direction: column;
+    box-shadow: 4px 4px 10px rgba(0,0,0,0.5);
+}
+
+.title-bar {
+    background: linear-gradient(90deg, var(--win-blue), #1084d0);
+    padding: 3px 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: white;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.title-icon {
+    width: 16px;
+    height: 16px;
+    margin-right: 5px;
+    background: white; /* Placeholder for icon */
+    display: inline-block;
+    vertical-align: middle;
+    border-radius: 2px;
+}
+
+.window-controls button {
+    width: 16px;
+    height: 14px;
+    background: var(--win-gray);
+    border-top: 1px solid var(--win-light);
+    border-left: 1px solid var(--win-light);
+    border-right: 1px solid var(--win-darker);
+    border-bottom: 1px solid var(--win-darker);
+    font-size: 10px;
+    line-height: 10px;
+    font-weight: bold;
+    margin-left: 2px;
+    padding: 0;
+}
+
+.menu-bar {
+    display: flex;
+    padding: 2px 5px;
+    border-bottom: 1px solid var(--win-dark);
+}
+
+.menu-item {
+    padding: 2px 8px;
+    cursor: pointer;
+}
+.menu-item:hover {
+    background-color: var(--win-blue);
+    color: white;
+}
+
+/* Game Area */
+.game-area {
+    flex: 1;
+    background-color: var(--felt-green);
+    position: relative;
+    overflow: hidden;
+    border-top: 2px solid var(--win-darker);
+    border-left: 2px solid var(--win-darker);
+    border-right: 2px solid var(--win-light);
+    border-bottom: 2px solid var(--win-light);
+    margin: 4px;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Zones */
+.opponent-zone {
+    height: 120px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding-top: 10px;
+}
+
+.table-zone {
+    flex: 1;
+    position: relative;
+    padding: 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 10px;
+}
+
+.player-zone {
+    height: 160px;
+    background: rgba(0,0,0,0.2);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    padding-bottom: 10px;
+    position: relative;
+}
+
+/* Decks */
+.deck-area {
+    position: absolute;
+    top: 50%;
+    left: 20px;
+    transform: translateY(-50%);
+    display: flex;
+    gap: 60px; 
+    z-index: 10;
+}
+
+.pile-label {
+    color: white;
+    font-size: 12px;
+    text-align: center;
+    margin-top: 5px;
+    text-shadow: 1px 1px 0 #000;
+}
+
+/* Cards */
+.card {
+    width: var(--card-width);
+    height: var(--card-height);
+    background-color: white;
+    border-radius: 4px;
+    box-shadow: 1px 1px 3px rgba(0,0,0,0.5);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 4px;
+    box-sizing: border-box;
+    cursor: default;
+    transition: transform 0.1s, box-shadow 0.1s;
+    user-select: none;
+}
+
+/* Only interactive cards bob and have pointer */
+.card.interactive {
+    cursor: pointer;
+}
+
+.card.interactive:hover {
+    transform: translateY(-5px);
+}
+
+.card.selected {
+    transform: translateY(-15px);
+    border: 2px solid blue;
+}
+
+/* If a card is both selected and interactive (hovered), allow it to bump slightly higher/different 
+   to show it's active, or just stay selected. */
+.card.interactive.selected:hover {
+    transform: translateY(-18px);
+}
+
+.card-back {
+    background: repeating-linear-gradient(
+        45deg,
+        #000080,
+        #000080 5px,
+        #ffffff 5px,
+        #ffffff 6px
+    );
+    border: 2px solid white;
+}
+
+.card-top, .card-bottom {
+    font-weight: bold;
+    font-size: 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 1;
+}
+
+.card-bottom {
+    transform: rotate(180deg);
+}
+
+.card-center {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 32px;
+}
+
+.red { color: #d00000; }
+.black { color: #000; }
+
+/* Hand Layout */
+.hand {
+    display: flex;
+    justify-content: center;
+    height: 110px;
+}
+
+.hand .card {
+    margin-right: -25px; /* Reduced overlap to show values */
+}
+.hand .card:last-child {
+    margin-right: 0;
+}
+
+/* Ensure hovered card is on top */
+.hand .card:hover {
+    z-index: 100;
+}
+
+.meld-group {
+    background: rgba(255,255,255,0.1);
+    padding: 5px;
+    border-radius: 4px;
+    display: flex;
+    margin-right: 10px;
+    margin-bottom: 10px;
+    /* Border removed per request */
+    border: none;
+    cursor: pointer;
+}
+
+.meld-group:hover {
+    background: rgba(255,255,255,0.2);
+}
+
+.meld-group .card {
+    /* Reduced overlap so values are visible on table */
+    margin-right: -25px;
+    transform: scale(0.8);
+    transform-origin: top left;
+    /* Add width compensation for the scale */
+    margin-bottom: -20px; 
+}
+
+.meld-group .card:last-child {
+    margin-right: 0;
+    /* Fix width for the last scaled card */
+    margin-right: -15px; 
+}
+
+.meld-group .card:hover {
+    transform: scale(0.8) translateY(-5px);
+    z-index: 10;
+}
+
+/* Unconfirmed Melds */
+.meld-group.pending {
+    background: rgba(255, 255, 255, 0.15); 
+}
+
+/* Controls Bar at Bottom */
+.status-bar {
+    background-color: var(--win-gray);
+    border-top: 2px solid var(--win-light);
+    padding: 2px;
+    display: flex;
+    gap: 2px;
+}
+
+.status-panel {
+    border-top: 1px solid var(--win-darker);
+    border-left: 1px solid var(--win-darker);
+    border-right: 1px solid var(--win-light);
+    border-bottom: 1px solid var(--win-light);
+    padding: 2px 6px;
+    font-size: 12px;
+    color: black;
+}
+
+.status-msg { flex: 1; }
+.status-score { width: 140px; }
+
+/* Buttons */
+.win-btn {
+    background-color: var(--win-gray);
+    border-top: 2px solid var(--win-light);
+    border-left: 2px solid var(--win-light);
+    border-right: 2px solid var(--win-darker);
+    border-bottom: 2px solid var(--win-darker);
+    color: black;
+    padding: 4px 12px;
+    font-family: 'PixelSans', sans-serif;
+    font-size: 12px;
+    cursor: pointer;
+    margin-bottom: 8px;
+    min-width: 80px;
+}
+
+.win-btn:active {
+    border-top: 2px solid var(--win-darker);
+    border-left: 2px solid var(--win-darker);
+    border-right: 2px solid var(--win-light);
+    border-bottom: 2px solid var(--win-light);
+    transform: translate(1px, 1px);
+}
+
+.win-btn:disabled {
+    color: var(--win-dark);
+    cursor: default;
+}
+
+/* Specific danger button for cancel */
+.win-btn.danger {
+    color: #800000;
+}
+
+.actions-bar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 5px;
+}
+
+/* Modal */
+.modal-overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.4);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+}
+
+.modal-window {
+    background: var(--win-gray);
+    width: 300px;
+    border: 2px solid var(--win-light);
+    box-shadow: 4px 4px 0 #000;
+    padding: 2px;
+}
+
+.modal-body {
+    padding: 15px;
+    text-align: center;
+    font-size: 14px;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: center;
+    padding-bottom: 10px;
+}
+
+/* Alert Modal Specifics */
+.alert-window {
+    width: 350px;
+    max-width: 90vw;
+}
+
+.alert-body {
+    display: flex;
+    align-items: flex-start;
+    gap: 15px;
+    text-align: left;
+    padding: 15px;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.alert-icon {
+    font-size: 32px;
+    flex-shrink: 0;
+}
+
+.alert-content {
+    white-space: pre-wrap;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+/* Animation Class */
+.flying-card {
+    position: fixed;
+    z-index: 1000;
+    transition: all 0.5s ease-in-out;
+    pointer-events: none;
+    box-shadow: 5px 5px 15px rgba(0,0,0,0.5) !important;
+}
+</file>
+
+<file path="tests/GameState.test.ts">
+import { describe, it, expect, beforeEach } from 'vitest';
+import { GameState } from '../src/GameState';
+import { Card } from '../src/core/Card';
+
+describe('GameState Integration', () => {
+    let game: GameState;
+
+    beforeEach(() => {
+        game = new GameState();
+        game.initGame();
+    });
+
+    it('should initialize correctly', () => {
+        expect(game.pHand.length).toBe(13);
+        expect(game.cHand.length).toBe(12);
+        expect(game.discardPile.length).toBe(0);
+        expect(game.round).toBe(1);
+    });
+
+    it('should prevent drawing from discard before Round 3', () => {
+        // Round 1
+        game.discardPile.push(new Card('♥', '5', 999));
+        game.phase = 'draw';
+        const res = game.drawCard('discard');
+        expect(res.success).toBe(false);
+        expect(res.msg).toContain('Round 3');
+    });
+
+    it('should allow drawing from discard at Round 3', () => {
+        game.round = 3;
+        game.discardPile.push(new Card('♥', '5', 999));
+        game.phase = 'draw';
+        const res = game.drawCard('discard');
+        expect(res.success).toBe(true);
+    });
+
+    it('should allow undoing a discard draw', () => {
+        game.round = 3;
+        const testCard = new Card('♥', '5', 999);
+        game.discardPile.push(testCard);
+        game.phase = 'draw';
+        
+        // Draw
+        game.drawCard('discard');
+        expect(game.pHand.some(c => c.id === 999)).toBe(true);
+        expect(game.discardPile.length).toBe(0);
+        expect(game.drawnFromDiscardId).toBe(999);
+        
+        // Undo
+        const undoRes = game.undoDraw();
+        expect(undoRes.success).toBe(true);
+        expect(game.pHand.some(c => c.id === 999)).toBe(false);
+        expect(game.discardPile.length).toBe(1);
+        expect(game.discardPile[0].id).toBe(999);
+        expect(game.phase).toBe('draw');
+    });
+
+    it('should NOT allow undoing after melding', () => {
+        game.round = 3;
+        const testCard = new Card('♥', '5', 999);
+        game.discardPile.push(testCard);
+        game.phase = 'draw';
+        
+        game.drawCard('discard');
+        
+        // Mock a meld event (adding to turnMelds)
+        game.turnMelds.push(0); 
+        
+        const undoRes = game.undoDraw();
+        expect(undoRes.success).toBe(false);
+        expect(undoRes.msg).toContain('after melding');
+    });
+});
+</file>
+
+<file path="tests/Rules.test.ts">
+import { describe, it, expect } from 'vitest';
+import { sortHandLogic } from '../src/core/rules';
+import { Card } from '../src/core/Card';
+
+describe('Jolly Rules', () => {
+    // ... (Existing tests unchanged) ...
+    
+    describe('Sorting Logic', () => {
+        it('should sort suits in Red-Black-Red-Black order', () => {
+            // Suit order: '♥', '♠', '♦', '♣'
+            const hand = [
+                new Card('♣', '5', 1),
+                new Card('♦', '5', 2),
+                new Card('♠', '5', 3),
+                new Card('♥', '5', 4)
+            ];
+            
+            sortHandLogic(hand);
+            
+            expect(hand[0].suit).toBe('♥');
+            expect(hand[1].suit).toBe('♠');
+            expect(hand[2].suit).toBe('♦');
+            expect(hand[3].suit).toBe('♣');
+        });
+    });
+});
+</file>
+
+<file path="index.html">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Žolíky 95</title>
+</head>
+<body>
+
+<div class="window">
+    <div class="title-bar">
+        <div style="display:flex; align-items:center;">
+            <span class="title-icon">🃏</span>
+            <span>Žolíky for Windows</span>
+        </div>
+        <div class="window-controls">
+            <button>_</button>
+            <button>□</button>
+            <button onclick="location.reload()">X</button>
+        </div>
+    </div>
+    
+    <div class="menu-bar">
+        <div class="menu-item" onclick="window.game.init()">New Game</div>
+        <div class="menu-item" onclick="alert('Jolly Rules:\n1. Opening: Pure Run (no Joker) + 36 pts.\n2. Jolly Hand: If 12 cards, take bottom card & win instantly.\n3. Ace: 1 in A-2-3, 10 otherwise.\n4. Swap Joker: Trade hand card for table Joker.')">Help</div>
+    </div>
+
+    <div class="game-area">
+        <!-- Decks -->
+        <div class="deck-area">
+            <div style="position: relative;">
+                <!-- Bottom card will be injected here by JS -->
+                <div id="stock-pile" class="card card-back" onclick="window.game.humanDraw('stock')"></div>
+                <div class="pile-label">Stock</div>
+            </div>
+            <div>
+                <div id="discard-pile" class="card" onclick="window.game.humanDraw('discard')" style="opacity: 0.5;"></div>
+                <div class="pile-label">Discard</div>
+            </div>
+        </div>
+
+        <!-- Opponent -->
+        <div class="opponent-zone">
+            <div id="cpu-hand" class="hand"></div>
+        </div>
+
+        <!-- Table/Melds -->
+        <div id="table-zone" class="table-zone"></div>
+
+        <!-- Player -->
+        <div class="player-zone">
+            <div class="actions-bar">
+                <button id="btn-meld" class="win-btn" onclick="window.game.humanMeld()" disabled>Meld Selected</button>
+                <button id="btn-cancel" class="win-btn danger" onclick="window.game.cancelMelds()" style="display:none">Cancel Melds</button>
+                <button id="btn-discard" class="win-btn" onclick="window.game.humanDiscard()" disabled>Discard Selected</button>
+            </div>
+            <div id="player-hand" class="hand"></div>
+        </div>
+    </div>
+
+    <div class="status-bar">
+        <div class="status-panel status-msg" id="status-text">Welcome to Žolíky 95.</div>
+        <div class="status-panel status-score" id="score-text">Rd: 1 | Pts: 0</div>
+    </div>
+</div>
+
+<div id="modal" class="modal-overlay">
+    <div class="modal-window">
+        <div class="title-bar">
+            <span>Game Over</span>
+            <button onclick="window.closeModal()">X</button>
+        </div>
+        <div class="modal-body" id="modal-msg">You Win!</div>
+        <div class="modal-footer">
+            <button class="win-btn" onclick="window.closeModal(); window.game.init();">Play Again</button>
+        </div>
+    </div>
+</div>
+
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
+</file>
+
+<file path="README.md">
+# Žolíky 95 (Jolly Card Game)
+
+A retro Windows 95-styled implementation of the card game "Jolly" (similar to Rummy), built with TypeScript and Vite.
+
+![Gameplay Screenshot](./screenshot.png)
+
+## Features
+
+- **Retro UI**: Authentic Windows 95 look and feel.
+- **Drag & Drop / Animations**: Smooth card interactions.
+- **Game Rules Engine**: Strict adherence to "Jolly" rules including Opening requirements, Ace values, and the "Jolly Hand" mechanic.
+- **CPU Opponent**: Basic AI to play against.
+
+## Installation & Running
+
+1. **Install Dependencies**
+   ```bash
+   yarn install
+   ```
+
+2. **Run Development Server**
+   ```bash
+   yarn dev
+   ```
+
+3. **Build for Production**
+   ```bash
+   yarn build
+   ```
+
+4. **Run Tests**
+   ```bash
+   yarn test
+   ```
+
+## Game Rules
+
+1.  **Objective**: Meld all cards in your hand. The game ends when you discard your last card.
+2.  **Round 1 & 2**: Draw and Discard only. No melding allowed.
+3.  **Round 3+**: Melding becomes available.
+4.  **Opening**: To place your first melds, you must have at least **36 Points** total, and at least one **Pure Run** (Straight Flush with no Jokers).
+5.  **Melds**:
+    *   **Set**: 3 or 4 cards of the same rank (e.g., 5♥, 5♠, 5♣).
+    *   **Run**: 3+ consecutive cards of the same suit (e.g., 4♦, 5♦, 6♦).
+6.  **Jokers**: Can replace any card. Cannot be placed adjacent to each other in a meld.
+7.  **Ace Values**:
+    *   **1 Point**: In a low run (A-2-3).
+    *   **10 Points**: In a high run (Q-K-A) or Set.
+8.  **Jolly Hand**: If you have 12 cards and the deck's bottom card is available, you can take it to win immediately (if you can meld your entire hand).
+
+## Architecture
+
+- **Core**: Pure TypeScript logic for Cards, Deck, AI, and Rules (`src/core/`).
+- **State**: `GameState` class manages the source of truth.
+- **View**: `UIManager` handles DOM manipulation and rendering.
+</file>
+
+<file path="src/core/Card.ts">
+import { ICard, Rank, Suit } from "../types";
+
+// Updated order: Red (♥), Black (♠), Red (♦), Black (♣)
+export const SUITS: Suit[] = ['♥', '♠', '♦', '♣'];
+export const RANKS: Rank[] = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+export const JOKER_SUIT: Suit = 'JK';
+
+export class Card implements ICard {
+    constructor(
+        public readonly suit: Suit,
+        public readonly rank: Rank,
+        public readonly id: number
+    ) {}
+
+    public representation?: { rank: Rank, suit: Suit };
+
+    get isJoker(): boolean {
+        return this.suit === JOKER_SUIT;
+    }
+
+    public selected: boolean = false;
+
+    public getValue(): number {
+        if (this.isJoker) return 0; 
+        if (['J', 'Q', 'K', 'A'].includes(this.rank)) return 10;
+        return parseInt(this.rank, 10) || 0;
+    }
+
+    public getOrder(): number {
+        if (this.isJoker) return 99;
+        return RANKS.indexOf(this.rank);
+    }
+
+    public getColor(): 'red' | 'black' {
+        return (this.suit === '♥' || this.suit === '♦') ? 'red' : 'black';
+    }
+}
+</file>
+
+<file path="src/core/rules.ts">
+import { ICard, MeldResult, Rank, Suit } from "../types";
+import { RANKS, SUITS } from "./Card";
+
+/**
+ * Sorts a hand: Suit then Rank.
+ * Uses the defined SUITS order to ensure alternating colors (Red/Black/Red/Black).
+ */
+export function sortHandLogic(hand: ICard[]): void {
+    hand.sort((a, b) => {
+        const suitIdxA = SUITS.indexOf(a.suit);
+        const suitIdxB = SUITS.indexOf(b.suit);
+        
+        // Sort by defined Suit order first
+        if (suitIdxA !== suitIdxB) return suitIdxA - suitIdxB;
+        
+        // Then by Rank
+        return a.getOrder() - b.getOrder();
+    });
+}
+
+/**
+ * Organizes a meld for display and logic:
+ * 1. Determines if Set or Run.
+ * 2. Sorts cards.
+ * 3. Assigns 'representation' to Jokers.
+ */
+export function organizeMeld(cards: ICard[]): ICard[] {
+    const validRes = validateMeld(cards);
+    if (!validRes.valid || !validRes.type) return cards;
+
+    cards.forEach(c => c.representation = undefined);
+
+    const jokers = cards.filter(c => c.isJoker);
+    const nonJokers = cards.filter(c => !c.isJoker);
+
+    // --- SET Logic ---
+    if (validRes.type === 'set') {
+        const rank = nonJokers[0].rank;
+        const usedSuits = new Set(nonJokers.map(c => c.suit));
+        const allSuits: Suit[] = ['♥', '♦', '♣', '♠'];
+        
+        let jokerIdx = 0;
+        for(const s of allSuits) {
+            if (!usedSuits.has(s) && jokerIdx < jokers.length) {
+                jokers[jokerIdx].representation = { rank: rank, suit: s };
+                jokerIdx++;
+            }
+        }
+        
+        const combined = [...nonJokers, ...jokers];
+        combined.sort((a,b) => {
+            const sA = a.representation?.suit || a.suit;
+            const sB = b.representation?.suit || b.suit;
+            // Use SUITS index for consistent sorting in Sets too
+            return SUITS.indexOf(sA) - SUITS.indexOf(sB);
+        });
+        return combined;
+    } 
+
+    // --- RUN Logic ---
+    if (validRes.type === 'run') {
+        const hasAce = nonJokers.some(c => c.rank === 'A');
+        let isAceLow = false;
+        if (hasAce) {
+             const lowRanks = ['2', '3', '4', '5'];
+             if (nonJokers.some(c => lowRanks.includes(c.rank))) isAceLow = true;
+        }
+
+        nonJokers.sort((a,b) => {
+            let oa = a.getOrder(); 
+            let ob = b.getOrder();
+            if(isAceLow) {
+                if(a.rank === 'A') oa = -1;
+                if(b.rank === 'A') ob = -1;
+            }
+            return oa - ob;
+        });
+
+        const suit = nonJokers[0].suit;
+        const finalSeq: ICard[] = [];
+        let currentRankIdx = -999; 
+
+        const getRankIdx = (c: ICard) => {
+            if (isAceLow && c.rank === 'A') return -1;
+            return RANKS.indexOf(c.rank);
+        };
+
+        const getRankFromIdx = (idx: number): Rank => {
+            if (idx === -1) return 'A';
+            return RANKS[idx];
+        };
+
+        for(let i=0; i<nonJokers.length; i++) {
+            const card = nonJokers[i];
+            const idx = getRankIdx(card);
+            
+            if (i === 0) {
+                finalSeq.push(card);
+                currentRankIdx = idx;
+            } else {
+                const diff = idx - currentRankIdx;
+                if (diff > 1) {
+                    const needed = diff - 1;
+                    for(let k=0; k<needed; k++) {
+                        if (jokers.length > 0) {
+                            const j = jokers.shift()!;
+                            const repRankIdx = currentRankIdx + 1 + k;
+                            j.representation = { rank: getRankFromIdx(repRankIdx), suit: suit };
+                            finalSeq.push(j);
+                        }
+                    }
+                }
+                finalSeq.push(card);
+                currentRankIdx = idx;
+            }
+        }
+
+        while(jokers.length > 0) {
+            const j = jokers.shift()!;
+            const nextIdx = currentRankIdx + 1;
+            
+            if (nextIdx < RANKS.length) { 
+                 j.representation = { rank: getRankFromIdx(nextIdx), suit: suit };
+                 finalSeq.push(j);
+                 currentRankIdx++;
+            } else {
+                const firstCard = finalSeq[0];
+                const firstRank = firstCard.representation ? firstCard.representation.rank : firstCard.rank;
+                let firstIdx = RANKS.indexOf(firstRank);
+                if (firstRank === 'A' && isAceLow) firstIdx = -1;
+
+                const prevIdx = firstIdx - 1;
+                if (prevIdx >= -1) { 
+                     j.representation = { rank: getRankFromIdx(prevIdx), suit: suit };
+                     finalSeq.unshift(j);
+                } else {
+                    finalSeq.push(j);
+                }
+            }
+        }
+        return finalSeq;
+    }
+
+    return cards;
+}
+
+function calculateMeldPoints(cards: ICard[], type: 'set' | 'run'): number {
+    let points = 0;
+    
+    if (type === 'set') {
+        const representative = cards.find(c => !c.isJoker);
+        if (!representative) return 0; 
+        const val = representative.getValue(); 
+        return val * cards.length;
+    }
+
+    if (type === 'run') {
+        const nonJokers = cards.filter(c => !c.isJoker);
+        const hasAce = nonJokers.some(c => c.rank === 'A');
+        
+        let isAceLow = false;
+        if (hasAce) {
+            const lowRanks = ['2', '3', '4', '5'];
+            if (nonJokers.some(c => lowRanks.includes(c.rank))) isAceLow = true;
+        }
+
+        points = cards.reduce((acc, c) => {
+            if (c.isJoker) return acc; 
+            return acc + c.getValue();
+        }, 0);
+
+        const jokerCount = cards.filter(c => c.isJoker).length;
+        points += (jokerCount * 10); 
+
+        if (isAceLow) {
+            const aceCount = cards.filter(c => c.rank === 'A').length;
+            points -= (aceCount * 9);
+            points -= (jokerCount * 9); 
+        }
+    }
+    return Math.max(0, points);
+}
+
+export function validateMeld(cards: ICard[]): MeldResult {
+    const jokerCount = cards.filter(c => c.isJoker).length;
+    const nonJokers = cards.filter(c => !c.isJoker);
+    
+    if (cards.length < 3) return { valid: false, points: 0 }; 
+    
+    for(let i=0; i<cards.length -1; i++) {
+        if(cards[i].isJoker && cards[i+1].isJoker) {
+             return { valid: false, points: 0 }; 
+        }
+    }
+
+    // 1. Set Check
+    if (nonJokers.length > 0) {
+        const firstRank = nonJokers[0].rank;
+        const isSet = nonJokers.every(c => c.rank === firstRank);
+        if (isSet) {
+             const suits = nonJokers.map(c => c.suit);
+             const uniqueSuits = new Set(suits);
+             if (uniqueSuits.size !== suits.length) return { valid: false, points: 0 };
+
+             const pts = calculateMeldPoints(cards, 'set');
+             return { valid: true, points: pts, type: 'set', isPure: jokerCount === 0 };
+        }
+    }
+
+    // 2. Run Check
+    if (nonJokers.length > 0) {
+        const firstSuit = nonJokers[0].suit;
+        const isSameSuit = nonJokers.every(c => c.suit === firstSuit);
+        if (isSameSuit) {
+            const checkSequence = (treatAceLow: boolean): boolean => {
+                const sorted = [...nonJokers].sort((a, b) => {
+                    let oa = a.getOrder();
+                    let ob = b.getOrder();
+                    if (treatAceLow) {
+                        if (a.rank === 'A') oa = -1;
+                        if (b.rank === 'A') ob = -1;
+                    }
+                    return oa - ob;
+                });
+
+                let gaps = 0;
+                for (let i = 0; i < sorted.length - 1; i++) {
+                    let oa = sorted[i].getOrder();
+                    let ob = sorted[i+1].getOrder();
+                    if (treatAceLow) {
+                        if (sorted[i].rank === 'A') oa = -1;
+                        if (sorted[i+1].rank === 'A') ob = -1;
+                    }
+                    
+                    const diff = ob - oa;
+                    if (diff < 1) return false; 
+                    gaps += (diff - 1);
+                }
+                return gaps <= jokerCount;
+            };
+
+            if (checkSequence(false)) {
+                const pts = calculateMeldPoints(cards, 'run');
+                return { valid: true, points: pts, type: 'run', isPure: jokerCount === 0 };
+            }
+            if (nonJokers.some(c => c.rank === 'A')) {
+                if (checkSequence(true)) {
+                    const pts = calculateMeldPoints(cards, 'run');
+                    return { valid: true, points: pts, type: 'run', isPure: jokerCount === 0 };
+                }
+            }
+        }
+    }
+    return { valid: false, points: 0 };
+}
+</file>
+
+<file path="src/GameState.ts">
+import { Deck } from "./core/Deck";
+import { Card } from "./core/Card";
+import { ICard, TurnOwner, TurnPhase } from "./types";
+import { sortHandLogic, validateMeld, organizeMeld } from "./core/rules";
+import { calculateCpuMove } from "./core/ai";
+
+export class GameState {
+    public deck: Deck;
+    public pHand: ICard[] = [];
+    public cHand: ICard[] = [];
+    public melds: ICard[][] = [];
+    public discardPile: ICard[] = [];
+    public bottomCard: ICard | null = null;
+    
+    public turn: TurnOwner = 'human';
+    public phase: TurnPhase = 'draw';
+    public round: number = 1;
+    
+    public hasOpened = { human: false, cpu: false };
+    public hasPureRun = { human: false, cpu: false };
+
+    public turnMelds: number[] = []; 
+    public turnPoints: number = 0;
+    public drawnFromDiscardId: number | null = null;
+    public discardCardUsed: boolean = false;
+
+    constructor() {
+        this.deck = new Deck();
+    }
+
+    public initGame() {
+        this.deck.init();
+        this.pHand = [];
+        this.cHand = [];
+        this.melds = [];
+        this.discardPile = [];
+        this.hasOpened = { human: false, cpu: false };
+        this.hasPureRun = { human: false, cpu: false };
+        this.round = 1;
+        this.resetTurnState();
+
+        this.bottomCard = this.deck.removeBottom() || null;
+
+        for(let i=0; i<13; i++) {
+            const pc = this.deck.draw();
+            if(pc) this.pHand.push(pc);
+        }
+        for(let i=0; i<12; i++) {
+            const cc = this.deck.draw();
+            if(cc) this.cHand.push(cc);
+        }
+
+        sortHandLogic(this.pHand);
+        sortHandLogic(this.cHand);
+
+        this.turn = 'human';
+        this.phase = 'action';
+    }
+
+    public resetTurnState() {
+        this.turnMelds = [];
+        this.turnPoints = 0;
+        this.drawnFromDiscardId = null;
+        this.discardCardUsed = false;
+    }
+
+    public drawCard(source: 'stock' | 'discard'): { success: boolean; card?: ICard; msg?: string } {
+        if (this.phase !== 'draw') return { success: false };
+
+        let card: ICard | undefined;
+
+        if (source === 'stock') {
+            card = this.deck.draw();
+            if (!card) {
+                if (this.discardPile.length > 0) {
+                    this.deck.setCards([...this.discardPile].reverse() as Card[]);
+                    this.discardPile = [];
+                    card = this.deck.draw();
+                } else {
+                    return { success: false, msg: "Deck Empty" };
+                }
+            }
+        } else {
+            // Rule: Cannot draw from discard until Round 3 (when melding is allowed)
+            if (this.round < 3) {
+                return { success: false, msg: "Cannot draw from discard until Round 3." };
+            }
+            if (this.discardPile.length === 0) return { success: false };
+            card = this.discardPile.pop();
+            if (card) this.drawnFromDiscardId = card.id;
+        }
+
+        if (!card) return { success: false, msg: "Error drawing card" };
+
+        if (this.turn === 'human') {
+            this.pHand.push(card);
+            sortHandLogic(this.pHand);
+        } else {
+            this.cHand.push(card);
+            sortHandLogic(this.cHand);
+        }
+
+        this.phase = 'action';
+        return { success: true, card };
+    }
+
+    // New: Allows undoing a discard draw if no actions taken yet
+    public undoDraw(): { success: boolean; msg?: string } {
+        if (this.phase !== 'action') return { success: false, msg: "Not in action phase." };
+        if (!this.drawnFromDiscardId) return { success: false, msg: "Did not draw from discard." };
+        if (this.turnMelds.length > 0) return { success: false, msg: "Cannot undo after melding." };
+
+        const cardIdx = this.pHand.findIndex(c => c.id === this.drawnFromDiscardId);
+        if (cardIdx === -1) return { success: false, msg: "Card not found in hand." };
+
+        const card = this.pHand.splice(cardIdx, 1)[0];
+        card.selected = false;
+        
+        // Return to discard pile
+        this.discardPile.push(card);
+        
+        // Reset state
+        this.drawnFromDiscardId = null;
+        this.phase = 'draw';
+        sortHandLogic(this.pHand);
+
+        return { success: true };
+    }
+
+    public attemptMeld(selectedCards: ICard[]): { success: boolean; msg?: string } {
+        if (this.round < 3) return { success: false, msg: `Cannot meld until Round 3.` };
+        
+        const result = validateMeld(selectedCards);
+        if (!result.valid) return { success: false, msg: "Invalid Meld. Check suits/ranks." };
+
+        if (this.drawnFromDiscardId) {
+            const used = selectedCards.some(c => c.id === this.drawnFromDiscardId);
+            if (used) this.discardCardUsed = true;
+        }
+
+        const organized = organizeMeld(selectedCards);
+
+        this.melds.push(organized);
+        this.turnMelds.push(this.melds.length - 1);
+        this.turnPoints += result.points;
+        
+        const ids = selectedCards.map(c => c.id);
+        this.pHand = this.pHand.filter(c => !ids.includes(c.id));
+
+        return { success: true };
+    }
+
+    public attemptJokerSwap(meldIndex: number, handCardId: number): { success: boolean; msg?: string } {
+        if (!this.hasOpened.human) return { success: false, msg: "Must open before swapping Jokers." };
+        
+        const meld = [...this.melds[meldIndex]];
+        const jokerIdx = meld.findIndex(c => c.isJoker);
+        if (jokerIdx === -1) return { success: false, msg: "No Joker in selected meld." };
+
+        const handCard = this.pHand.find(c => c.id === handCardId);
+        if (!handCard) return { success: false, msg: "Card not in hand." };
+
+        const joker = meld[jokerIdx];
+        meld[jokerIdx] = handCard; 
+
+        const organized = organizeMeld(meld);
+        const res = validateMeld(organized);
+        if (!res.valid) return { success: false, msg: "Card does not fit in meld." };
+
+        this.melds[meldIndex] = organized;
+        this.pHand = this.pHand.filter(c => c.id !== handCardId);
+        
+        joker.representation = undefined;
+        this.pHand.push(joker); 
+        
+        sortHandLogic(this.pHand);
+
+        return { success: true };
+    }
+
+    public attemptJollyHand(): { success: boolean; msg?: string; winner?: string } {
+        if (this.round < 3) return { success: false, msg: "Cannot take Jolly Hand until Round 3." };
+        if (this.pHand.length !== 12) return { success: false, msg: "Need exactly 12 cards to take Jolly Hand." };
+        if (!this.bottomCard) return { success: false, msg: "No bottom card available." };
+        if (this.phase !== 'draw') return { success: false, msg: "Can only take Jolly Hand at start of turn." };
+
+        this.pHand.push(this.bottomCard);
+        this.bottomCard = null; 
+        sortHandLogic(this.pHand);
+        this.phase = 'action'; 
+        
+        return { success: true, msg: "Jolly Hand! You must meld ALL cards now to win." };
+    }
+
+    public cancelTurnMelds() {
+        for (let i = this.turnMelds.length - 1; i >= 0; i--) {
+            const idx = this.turnMelds[i];
+            const cards = this.melds[idx];
+            cards.forEach(c => c.representation = undefined);
+            this.pHand.push(...cards);
+            this.melds.splice(idx, 1);
+        }
+        sortHandLogic(this.pHand);
+        this.pHand.forEach(c => c.selected = false);
+        this.turnMelds = [];
+        this.turnPoints = 0;
+        this.discardCardUsed = false;
+    }
+
+    public attemptDiscard(cardId: number): { success: boolean; msg?: string; winner?: string, score?: number } {
+        if (!this.hasOpened.human && this.turnMelds.length > 0) {
+            if (this.turnPoints < 36) {
+                return { success: false, msg: `Opening melds must sum to 36+. Current: ${this.turnPoints}` };
+            }
+            const hasPureRun = this.turnMelds.some(idx => {
+                const res = validateMeld(this.melds[idx]);
+                return res.type === 'run' && res.isPure;
+            });
+
+            if (!hasPureRun) return { success: false, msg: "Opening requires at least 1 Pure Run (Straight Flush)." };
+
+            this.hasOpened.human = true;
+            this.turnMelds = []; 
+        }
+
+        if (this.drawnFromDiscardId && !this.discardCardUsed) {
+             return { success: false, msg: "Must meld the card picked from discard pile." };
+        }
+
+        const cardIdx = this.pHand.findIndex(c => c.id === cardId);
+        if (cardIdx === -1) return { success: false, msg: "Card not found" };
+
+        const card = this.pHand.splice(cardIdx, 1)[0];
+        card.selected = false;
+        
+        if (this.pHand.length === 0) {
+            return { success: true, winner: 'Human', score: this.cHand.length * -1 };
+        }
+
+        this.discardPile.push(card);
+        this.turn = 'cpu';
+        this.phase = 'draw';
+        this.resetTurnState();
+        return { success: true };
+    }
+
+    public addToExistingMeld(meldIndex: number, selectedCards: ICard[]): { success: boolean; msg?: string; winner?: string } {
+        if (!this.hasOpened.human) return { success: false, msg: "Must open before adding to melds." };
+        
+        const targetMeld = [...this.melds[meldIndex]];
+        const candidates = [...targetMeld, ...selectedCards];
+
+        const organized = organizeMeld(candidates);
+        
+        const res = validateMeld(organized);
+        if (!res.valid) return { success: false, msg: "Cannot add cards to this meld." };
+
+        if (this.drawnFromDiscardId) {
+            if (selectedCards.some(c => c.id === this.drawnFromDiscardId)) {
+                this.discardCardUsed = true;
+            }
+        }
+
+        this.melds[meldIndex] = organized;
+        const ids = selectedCards.map(c => c.id);
+        this.pHand = this.pHand.filter(c => !ids.includes(c.id));
+
+        if (this.pHand.length === 0) return { success: true, winner: "Human" };
+        
+        return { success: true };
+    }
+
+    public processCpuTurn(): { winner?: string, score?: number } {
+        this.drawCard('stock'); 
+
+        if (this.round >= 3) {
+            const move = calculateCpuMove(this.cHand, this.hasOpened.cpu);
+            
+            move.meldsToPlay.forEach(meld => {
+                if (!this.hasOpened.cpu) {
+                    const res = validateMeld(meld);
+                    if (res.type === 'run' && res.isPure) this.hasPureRun.cpu = true;
+                }
+                const organized = organizeMeld(meld);
+                this.melds.push(organized);
+                this.cHand = this.cHand.filter(c => !meld.includes(c));
+            });
+
+            if (!this.hasOpened.cpu) {
+                if (move.meldsToPlay.length > 0) this.hasOpened.cpu = true;
+            }
+
+            if (move.discardCard) {
+                const d = move.discardCard;
+                this.cHand = this.cHand.filter(c => c.id !== d.id);
+                if (this.cHand.length === 0) return { winner: "CPU", score: this.pHand.length * -1 };
+                this.discardPile.push(d);
+            }
+        } else {
+            const randIdx = Math.floor(Math.random() * this.cHand.length);
+            const disc = this.cHand.splice(randIdx, 1)[0];
+            this.discardPile.push(disc);
+        }
+
+        this.round++;
+        this.turn = 'human';
+        this.phase = 'draw';
+        this.resetTurnState();
+
+        return {};
+    }
+}
+</file>
+
+<file path="src/main.ts">
+import { GameState } from "./GameState";
+import { UIManager } from "./UIManager";
+import "./style.css";
+
+const game = new GameState();
+const ui = new UIManager(game);
+
+const HELP_HTML = `
+<b>Jolly Rules:</b><br><br>
+1. <b>Opening:</b> You must have at least one Pure Run (Straight Flush without Jokers) and total meld points of 36+ to open.<br><br>
+2. <b>Melds:</b><br>
+   - Sets: 3 or 4 cards of same rank (different suits).<br>
+   - Runs: 3+ consecutive cards of same suit.<br><br>
+3. <b>Ace Values:</b><br>
+   - 1 point in A-2-3 run.<br>
+   - 10 points in Q-K-A run or Sets.<br><br>
+4. <b>Jolly Hand:</b> If you have 12 cards and can take the bottom card to meld EVERYTHING at once, you win immediately.<br><br>
+5. <b>Jokers:</b> Can replace any card. Swap them from table if you have the card they represent.
+`;
+
+const App = {
+    init: () => {
+        game.initGame();
+        ui.render();
+        ui.updateStatus("Your turn. Discard a card to start.");
+    },
+
+    showHelp: () => {
+        // Use HTML render mode
+        ui.showAlert(HELP_HTML, "Help Topics", "❓", true);
+    },
+
+    humanDraw: (source: 'stock' | 'discard') => {
+        const res = game.drawCard(source);
+        if (res.success && res.card) {
+            ui.render(); 
+            ui.animateDraw(res.card, source, () => {
+                let msg = "Meld cards or Discard to end turn.";
+                if (game.drawnFromDiscardId) msg = "You drew from discard. You MUST meld this card!";
+                ui.updateStatus(msg);
+            });
+        } else {
+            if (res.msg) ui.showAlert(res.msg);
+        }
+    },
+
+    undoDraw: () => {
+        const res = game.undoDraw();
+        if (res.success) {
+            ui.render();
+            ui.updateStatus("Draw undone. Select a pile.");
+        } else {
+            ui.showAlert(res.msg || "Cannot undo");
+        }
+    },
+
+    humanMeld: () => {
+        const selected = game.pHand.filter(c => c.selected);
+        const res = game.attemptMeld(selected);
+        
+        if (res.success) {
+            ui.render();
+            if (!game.hasOpened.human) {
+                ui.updateStatus(`Pending Opening. Need Pure Run + 36pts. Current: ${game.turnPoints}`);
+            }
+        } else {
+            ui.showAlert(res.msg || "Invalid Meld");
+        }
+    },
+
+    humanDiscard: () => {
+        const selected = game.pHand.filter(c => c.selected);
+        if (selected.length !== 1) {
+            ui.showAlert("Select exactly one card to discard.");
+            return;
+        }
+
+        const res = game.attemptDiscard(selected[0].id);
+        if (res.success) {
+            if (res.winner) {
+                ui.showWinModal(`${res.winner} Wins! Opponent score: ${res.score}`);
+                return;
+            }
+            
+            ui.render();
+            ui.updateStatus("CPU is thinking...");
+            
+            setTimeout(() => {
+                const cpuRes = game.processCpuTurn();
+                if (cpuRes.winner) {
+                    ui.showWinModal(`${cpuRes.winner} Wins! You lose ${cpuRes.score} pts.`);
+                }
+                ui.render();
+                ui.updateStatus(`Round ${game.round}. Your turn.`);
+            }, 1000);
+
+        } else {
+            ui.showAlert(res.msg || "Cannot discard");
+        }
+    },
+
+    attemptJolly: () => {
+        const res = game.attemptJollyHand();
+        if(res.success) {
+            ui.render();
+            ui.updateStatus(res.msg || "Jolly Hand Active!");
+        } else {
+            ui.showAlert(res.msg || "Conditions not met");
+        }
+    },
+
+    cancelMelds: () => {
+        game.cancelTurnMelds();
+        ui.render();
+        ui.updateStatus("Melds cancelled.");
+    },
+
+    closeModal: () => {
+        ui.closeWinModal();
+    },
+
+    closeAlert: () => {
+        ui.closeAlert();
+    }
+};
+
+(window as any).game = App;
+(window as any).closeModal = App.closeModal;
+(window as any).closeAlert = App.closeAlert;
+
+App.init();
+</file>
+
+<file path="src/types.ts">
+export type Suit = '♥' | '♦' | '♣' | '♠' | 'JK';
+export type Rank = '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K' | 'A' | 'Joker';
+
+export type TurnOwner = 'human' | 'cpu';
+export type TurnPhase = 'draw' | 'action';
+
+export interface MeldResult {
+    valid: boolean;
+    points: number;
+    type?: 'set' | 'run';
+    isPure?: boolean; 
+}
+
+export interface ICard {
+    readonly id: number;
+    readonly suit: Suit;
+    readonly rank: Rank;
+    readonly isJoker: boolean;
+    selected: boolean;
+    
+    // New property for Joker representation
+    representation?: { rank: Rank, suit: Suit };
+
+    getValue(): number; 
+    getOrder(): number;
+    getColor(): 'red' | 'black';
+}
+</file>
+
+<file path="package.json">
+{
+  "name": "zoliky-95",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "vitest"
+  },
+  "devDependencies": {
+    "typescript": "^5.2.2",
+    "vite": "^5.0.0",
+    "vitest": "^1.0.0"
+  }
+}
+</file>
+
+<file path="src/UIManager.ts">
+import { GameState } from "./GameState";
+import { ICard } from "./types";
+
+export class UIManager {
+    private game: GameState;
+    private ui = {
+        stock: document.getElementById('stock-pile')!,
+        discard: document.getElementById('discard-pile')!,
+        pHand: document.getElementById('player-hand')!,
+        cHand: document.getElementById('cpu-hand')!,
+        table: document.getElementById('table-zone')!,
+        status: document.getElementById('status-text')!,
+        score: document.getElementById('score-text')!,
+        btnMeld: document.getElementById('btn-meld') as HTMLButtonElement,
+        btnCancel: document.getElementById('btn-cancel') as HTMLButtonElement,
+        btnDiscard: document.getElementById('btn-discard') as HTMLButtonElement,
+        modal: document.getElementById('modal')!,
+        modalMsg: document.getElementById('modal-msg')!,
+        alertModal: document.getElementById('alert-modal')!,
+        alertTitle: document.getElementById('alert-title')!,
+        alertMsg: document.getElementById('alert-msg')!,
+        alertIcon: document.getElementById('alert-icon')!
+    };
+
+    constructor(game: GameState) {
+        this.game = game;
+    }
+
+    public render() {
+        const { round, turnPoints, discardPile, pHand, cHand, melds, turnMelds, hasOpened, turn, bottomCard, phase, drawnFromDiscardId } = this.game;
+
+        this.ui.score.innerText = `Rd: ${round} | Pts: ${turnPoints}`;
+
+        const isMyTurn = turn === 'human';
+        const isDrawPhase = isMyTurn && phase === 'draw';
+        const isActionPhase = isMyTurn && phase === 'action';
+
+        // --- Stock Pile ---
+        this.ui.stock.className = `card card-back ${isDrawPhase ? 'interactive' : ''}`;
+        
+        // --- Bottom Card ---
+        if (bottomCard) {
+             this.ui.stock.style.position = 'relative'; 
+             this.ui.stock.style.zIndex = '10';
+             this.ui.stock.style.boxShadow = "2px 2px 0 #fff, 4px 4px 0 #000"; 
+             
+             let bEl = document.getElementById('bottom-card-display');
+             if(!bEl) {
+                 bEl = document.createElement('div');
+                 bEl.id = 'bottom-card-display';
+                 bEl.style.position = 'absolute';
+                 bEl.style.top = '5px'; 
+                 bEl.style.left = '40px'; 
+                 bEl.style.zIndex = '1'; 
+                 bEl.style.transform = 'rotate(10deg)';
+                 this.ui.stock.parentElement?.appendChild(bEl);
+             }
+             
+             bEl.className = `card ${bottomCard.getColor()}`;
+             bEl.innerHTML = this.renderCardInner(bottomCard);
+             bEl.title = "Jolly Hand (Click to take in Round 3+)";
+             
+             const canTakeJolly = isDrawPhase && round >= 3 && pHand.length === 12;
+             
+             if (canTakeJolly) {
+                 bEl.classList.add('interactive');
+                 bEl.onclick = () => (window as any).game.attemptJolly();
+                 // Removed yellow highlight
+                 bEl.style.boxShadow = "1px 1px 3px rgba(0,0,0,0.5)";
+             } else {
+                 bEl.classList.remove('interactive');
+                 bEl.onclick = null;
+                 bEl.style.boxShadow = "1px 1px 3px rgba(0,0,0,0.5)";
+             }
+
+        } else {
+             const bEl = document.getElementById('bottom-card-display');
+             if(bEl) bEl.remove();
+        }
+
+        // --- Discard Pile ---
+        if (discardPile.length > 0) {
+            const top = discardPile[discardPile.length - 1];
+            this.ui.discard.innerHTML = this.renderCardInner(top);
+            const canDrawDiscard = isDrawPhase && round >= 3;
+            const discardInteractive = canDrawDiscard ? 'interactive' : '';
+            this.ui.discard.className = `card ${top.getColor()} ${discardInteractive}`;
+            this.ui.discard.style.opacity = "1";
+        } else {
+            this.ui.discard.innerHTML = "";
+            this.ui.discard.className = "card";
+            this.ui.discard.style.opacity = "0.5";
+        }
+
+        // --- Player Hand ---
+        this.ui.pHand.innerHTML = '';
+        pHand.forEach(c => {
+            const el = document.createElement('div');
+            const handInteractive = isMyTurn ? 'interactive' : '';
+            el.className = `card ${c.getColor()} ${c.selected ? 'selected' : ''} ${handInteractive}`;
+            el.dataset.id = c.id.toString(); 
+            el.innerHTML = this.renderCardInner(c);
+            el.onclick = () => this.handleCardClick(c);
+            this.ui.pHand.appendChild(el);
+        });
+        
+        const oldBtn = document.getElementById('btn-jolly');
+        if (oldBtn) oldBtn.remove();
+
+        // --- CPU Hand ---
+        this.ui.cHand.innerHTML = '';
+        cHand.forEach(() => {
+            const el = document.createElement('div');
+            el.className = `card card-back`; 
+            this.ui.cHand.appendChild(el);
+        });
+
+        // --- Table ---
+        this.ui.table.innerHTML = '';
+        melds.forEach((meld, idx) => {
+            const grp = document.createElement('div');
+            const isPending = turnMelds.includes(idx) && !hasOpened.human && turn === 'human';
+            
+            grp.className = `meld-group ${isPending ? 'pending' : ''}`;
+            if (isActionPhase) {
+                grp.style.cursor = 'pointer';
+                grp.onclick = () => this.handleMeldClick(idx);
+            } else {
+                grp.style.cursor = 'default';
+                grp.onclick = null;
+            }
+            
+            meld.forEach(c => {
+                const el = document.createElement('div');
+                el.className = `card ${c.getColor()}`;
+                el.innerHTML = this.renderCardInner(c);
+                grp.appendChild(el);
+            });
+            this.ui.table.appendChild(grp);
+        });
+
+        const selectedCount = pHand.filter(c => c.selected).length;
+        this.ui.btnMeld.disabled = selectedCount < 1; 
+        this.ui.btnDiscard.disabled = selectedCount !== 1;
+        
+        // --- Cancel / Undo Logic ---
+        const canUndoDraw = isActionPhase && drawnFromDiscardId && turnMelds.length === 0;
+        const canCancelMelds = turnMelds.length > 0 && !hasOpened.human;
+
+        if (canUndoDraw) {
+            this.ui.btnCancel.style.display = 'block';
+            this.ui.btnCancel.innerText = 'Undo Draw';
+            this.ui.btnCancel.onclick = () => (window as any).game.undoDraw();
+        } else if (canCancelMelds) {
+            this.ui.btnCancel.style.display = 'block';
+            this.ui.btnCancel.innerText = 'Cancel Melds';
+            this.ui.btnCancel.onclick = () => (window as any).game.cancelMelds();
+        } else {
+            this.ui.btnCancel.style.display = 'none';
+        }
+    }
+
+    public updateStatus(msg: string) {
+        this.ui.status.innerText = msg;
+    }
+
+    public showWinModal(msg: string) {
+        this.ui.modalMsg.innerText = msg;
+        this.ui.modal.style.display = 'flex';
+    }
+
+    public closeWinModal() {
+        this.ui.modal.style.display = 'none';
+    }
+
+    public showAlert(msg: string, title: string = 'Alert', icon: string = '⚠️', isHtml: boolean = false) {
+        this.ui.alertTitle.innerText = title;
+        if (isHtml) {
+            this.ui.alertMsg.innerHTML = msg;
+        } else {
+            this.ui.alertMsg.innerText = msg;
+        }
+        this.ui.alertIcon.innerText = icon;
+        this.ui.alertModal.style.display = 'flex';
+    }
+
+    public closeAlert() {
+        this.ui.alertModal.style.display = 'none';
+    }
+
+    private renderCardInner(c: ICard): string {
+        if (c.isJoker) {
+            const rep = c.representation;
+            const topContent = rep ? `<span>${rep.rank}</span><span>${rep.suit}</span>` : `<span>🤡</span>`;
+            const botContent = rep ? `<span>${rep.rank}</span><span>${rep.suit}</span>` : `<span>🤡</span>`;
+            const style = rep ? 'color: gray; opacity: 0.7;' : '';
+
+            return `
+                <div class="card-top" style="${style}">${topContent}</div>
+                <div class="card-center">🃏</div>
+                <div class="card-bottom" style="${style}">${botContent}</div>
+            `;
+        }
+        return `
+            <div class="card-top"><span>${c.rank}</span><span>${c.suit}</span></div>
+            <div class="card-center">${c.suit}</div>
+            <div class="card-bottom"><span>${c.rank}</span><span>${c.suit}</span></div>
+        `;
+    }
+
+    private handleCardClick(card: ICard) {
+        if (this.game.turn !== 'human') return; 
+        card.selected = !card.selected;
+        this.render();
+    }
+
+    private handleMeldClick(meldIdx: number) {
+        if (this.game.phase !== 'action') return;
+        const selected = this.game.pHand.filter(c => c.selected);
+        if (selected.length === 0) return;
+
+        if (selected.length === 1) {
+            const res = this.game.attemptJokerSwap(meldIdx, selected[0].id);
+            if (res.success) {
+                this.render();
+                return;
+            }
+        }
+
+        const res = this.game.addToExistingMeld(meldIdx, selected);
+        if (res.success) {
+            if (res.winner) this.showWinModal(`${res.winner} Wins!`);
+            this.render();
+        } else {
+            this.showAlert(res.msg || "Invalid Move");
+        }
+    }
+
+    public animateDraw(card: ICard, source: 'stock' | 'discard', onComplete: () => void) {
+        const sourceEl = source === 'stock' ? this.ui.stock : this.ui.discard;
+        const targetEl = this.ui.pHand.querySelector(`[data-id="${card.id}"]`) as HTMLElement;
+
+        if (!sourceEl || !targetEl) {
+            onComplete();
+            return;
+        }
+        targetEl.style.opacity = '0';
+        const flyer = document.createElement('div');
+        flyer.className = `card ${card.getColor()} flying-card`;
+        flyer.innerHTML = this.renderCardInner(card);
+        const sRect = sourceEl.getBoundingClientRect();
+        flyer.style.left = sRect.left + 'px';
+        flyer.style.top = sRect.top + 'px';
+        flyer.style.width = sRect.width + 'px';
+        flyer.style.height = sRect.height + 'px';
+        document.body.appendChild(flyer);
+        flyer.offsetHeight;
+        const tRect = targetEl.getBoundingClientRect();
+        flyer.style.left = tRect.left + 'px';
+        flyer.style.top = tRect.top + 'px';
+        flyer.style.transform = 'scale(1.0)';
+        setTimeout(() => {
+            document.body.removeChild(flyer);
+            targetEl.style.opacity = '1';
+            onComplete();
+        }, 500);
+    }
+}
+</file>
+
+</files>

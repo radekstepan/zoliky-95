@@ -81,6 +81,10 @@ export class GameState {
                 }
             }
         } else {
+            // Rule: Cannot draw from discard until Round 3 (when melding is allowed)
+            if (this.round < 3) {
+                return { success: false, msg: "Cannot draw from discard until Round 3." };
+            }
             if (this.discardPile.length === 0) return { success: false };
             card = this.discardPile.pop();
             if (card) this.drawnFromDiscardId = card.id;
@@ -100,6 +104,29 @@ export class GameState {
         return { success: true, card };
     }
 
+    // New: Allows undoing a discard draw if no actions taken yet
+    public undoDraw(): { success: boolean; msg?: string } {
+        if (this.phase !== 'action') return { success: false, msg: "Not in action phase." };
+        if (!this.drawnFromDiscardId) return { success: false, msg: "Did not draw from discard." };
+        if (this.turnMelds.length > 0) return { success: false, msg: "Cannot undo after melding." };
+
+        const cardIdx = this.pHand.findIndex(c => c.id === this.drawnFromDiscardId);
+        if (cardIdx === -1) return { success: false, msg: "Card not found in hand." };
+
+        const card = this.pHand.splice(cardIdx, 1)[0];
+        card.selected = false;
+        
+        // Return to discard pile
+        this.discardPile.push(card);
+        
+        // Reset state
+        this.drawnFromDiscardId = null;
+        this.phase = 'draw';
+        sortHandLogic(this.pHand);
+
+        return { success: true };
+    }
+
     public attemptMeld(selectedCards: ICard[]): { success: boolean; msg?: string } {
         if (this.round < 3) return { success: false, msg: `Cannot meld until Round 3.` };
         
@@ -111,7 +138,6 @@ export class GameState {
             if (used) this.discardCardUsed = true;
         }
 
-        // Organize meld (sort and label Jokers)
         const organized = organizeMeld(selectedCards);
 
         this.melds.push(organized);
@@ -137,7 +163,6 @@ export class GameState {
         const joker = meld[jokerIdx];
         meld[jokerIdx] = handCard; 
 
-        // Validate & Reorganize
         const organized = organizeMeld(meld);
         const res = validateMeld(organized);
         if (!res.valid) return { success: false, msg: "Card does not fit in meld." };
@@ -145,7 +170,6 @@ export class GameState {
         this.melds[meldIndex] = organized;
         this.pHand = this.pHand.filter(c => c.id !== handCardId);
         
-        // Reset joker representation before returning to hand
         joker.representation = undefined;
         this.pHand.push(joker); 
         
@@ -155,8 +179,10 @@ export class GameState {
     }
 
     public attemptJollyHand(): { success: boolean; msg?: string; winner?: string } {
-        if (this.pHand.length !== 12) return { success: false, msg: "Need exactly 12 cards." };
+        if (this.round < 3) return { success: false, msg: "Cannot take Jolly Hand until Round 3." };
+        if (this.pHand.length !== 12) return { success: false, msg: "Need exactly 12 cards to take Jolly Hand." };
         if (!this.bottomCard) return { success: false, msg: "No bottom card available." };
+        if (this.phase !== 'draw') return { success: false, msg: "Can only take Jolly Hand at start of turn." };
 
         this.pHand.push(this.bottomCard);
         this.bottomCard = null; 
@@ -170,7 +196,6 @@ export class GameState {
         for (let i = this.turnMelds.length - 1; i >= 0; i--) {
             const idx = this.turnMelds[i];
             const cards = this.melds[idx];
-            // Reset representations
             cards.forEach(c => c.representation = undefined);
             this.pHand.push(...cards);
             this.melds.splice(idx, 1);
@@ -225,7 +250,6 @@ export class GameState {
         const targetMeld = [...this.melds[meldIndex]];
         const candidates = [...targetMeld, ...selectedCards];
 
-        // organizeMeld handles the sorting and representation
         const organized = organizeMeld(candidates);
         
         const res = validateMeld(organized);
@@ -257,7 +281,6 @@ export class GameState {
                     const res = validateMeld(meld);
                     if (res.type === 'run' && res.isPure) this.hasPureRun.cpu = true;
                 }
-                // Organize before adding
                 const organized = organizeMeld(meld);
                 this.melds.push(organized);
                 this.cHand = this.cHand.filter(c => !meld.includes(c));

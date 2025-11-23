@@ -3,7 +3,6 @@ import { ICard } from "./types";
 
 export class UIManager {
     private game: GameState;
-    // ... existing properties ...
     private ui = {
         stock: document.getElementById('stock-pile')!,
         discard: document.getElementById('discard-pile')!,
@@ -19,7 +18,8 @@ export class UIManager {
         modalMsg: document.getElementById('modal-msg')!,
         alertModal: document.getElementById('alert-modal')!,
         alertTitle: document.getElementById('alert-title')!,
-        alertMsg: document.getElementById('alert-msg')!
+        alertMsg: document.getElementById('alert-msg')!,
+        alertIcon: document.getElementById('alert-icon')!
     };
 
     constructor(game: GameState) {
@@ -27,38 +27,64 @@ export class UIManager {
     }
 
     public render() {
-        const { round, turnPoints, discardPile, pHand, cHand, melds, turnMelds, hasOpened, turn, bottomCard } = this.game;
+        const { round, turnPoints, discardPile, pHand, cHand, melds, turnMelds, hasOpened, turn, bottomCard, phase, drawnFromDiscardId } = this.game;
 
         this.ui.score.innerText = `Rd: ${round} | Pts: ${turnPoints}`;
 
-        // Bottom Card Logic
+        const isMyTurn = turn === 'human';
+        const isDrawPhase = isMyTurn && phase === 'draw';
+        const isActionPhase = isMyTurn && phase === 'action';
+
+        // --- Stock Pile ---
+        this.ui.stock.className = `card card-back ${isDrawPhase ? 'interactive' : ''}`;
+        
+        // --- Bottom Card ---
         if (bottomCard) {
+             this.ui.stock.style.position = 'relative'; 
+             this.ui.stock.style.zIndex = '10';
              this.ui.stock.style.boxShadow = "2px 2px 0 #fff, 4px 4px 0 #000"; 
              
              let bEl = document.getElementById('bottom-card-display');
              if(!bEl) {
                  bEl = document.createElement('div');
                  bEl.id = 'bottom-card-display';
-                 bEl.className = `card ${bottomCard.getColor()}`;
                  bEl.style.position = 'absolute';
-                 bEl.style.top = '5px';
-                 bEl.style.left = '5px';
-                 bEl.style.zIndex = '0';
-                 bEl.style.transform = 'rotate(5deg)';
-                 bEl.innerHTML = this.renderCardInner(bottomCard);
+                 bEl.style.top = '5px'; 
+                 bEl.style.left = '40px'; 
+                 bEl.style.zIndex = '1'; 
+                 bEl.style.transform = 'rotate(10deg)';
                  this.ui.stock.parentElement?.appendChild(bEl);
-                 this.ui.stock.style.zIndex = '5';
              }
+             
+             bEl.className = `card ${bottomCard.getColor()}`;
+             bEl.innerHTML = this.renderCardInner(bottomCard);
+             bEl.title = "Jolly Hand (Click to take in Round 3+)";
+             
+             const canTakeJolly = isDrawPhase && round >= 3 && pHand.length === 12;
+             
+             if (canTakeJolly) {
+                 bEl.classList.add('interactive');
+                 bEl.onclick = () => (window as any).game.attemptJolly();
+                 // Removed yellow highlight
+                 bEl.style.boxShadow = "1px 1px 3px rgba(0,0,0,0.5)";
+             } else {
+                 bEl.classList.remove('interactive');
+                 bEl.onclick = null;
+                 bEl.style.boxShadow = "1px 1px 3px rgba(0,0,0,0.5)";
+             }
+
         } else {
              const bEl = document.getElementById('bottom-card-display');
              if(bEl) bEl.remove();
         }
 
-        // Discard Pile
+        // --- Discard Pile ---
         if (discardPile.length > 0) {
             const top = discardPile[discardPile.length - 1];
             this.ui.discard.innerHTML = this.renderCardInner(top);
-            this.ui.discard.className = `card ${top.getColor()}`;
+            const canDrawDiscard = isDrawPhase && round >= 3;
+            const discardInteractive = canDrawDiscard ? 'interactive' : '';
+            this.ui.discard.className = `card ${top.getColor()} ${discardInteractive}`;
             this.ui.discard.style.opacity = "1";
         } else {
             this.ui.discard.innerHTML = "";
@@ -66,36 +92,22 @@ export class UIManager {
             this.ui.discard.style.opacity = "0.5";
         }
 
-        // Player Hand
+        // --- Player Hand ---
         this.ui.pHand.innerHTML = '';
         pHand.forEach(c => {
             const el = document.createElement('div');
-            el.className = `card ${c.getColor()} ${c.selected ? 'selected' : ''}`;
+            const handInteractive = isMyTurn ? 'interactive' : '';
+            el.className = `card ${c.getColor()} ${c.selected ? 'selected' : ''} ${handInteractive}`;
             el.dataset.id = c.id.toString(); 
             el.innerHTML = this.renderCardInner(c);
             el.onclick = () => this.handleCardClick(c);
             this.ui.pHand.appendChild(el);
         });
         
-        // Jolly Hand
-        let jhBtn = document.getElementById('btn-jolly');
-        if (!jhBtn) {
-            jhBtn = document.createElement('button');
-            jhBtn.id = 'btn-jolly';
-            jhBtn.className = 'win-btn';
-            jhBtn.innerText = 'Take Jolly Hand';
-            jhBtn.style.marginLeft = '10px';
-            jhBtn.onclick = () => (window as any).game.attemptJolly();
-            this.ui.btnDiscard.parentElement?.appendChild(jhBtn);
-        }
-        
-        if (pHand.length === 12 && bottomCard && turn === 'human') {
-            jhBtn.style.display = 'inline-block';
-        } else {
-            jhBtn.style.display = 'none';
-        }
+        const oldBtn = document.getElementById('btn-jolly');
+        if (oldBtn) oldBtn.remove();
 
-        // CPU Hand
+        // --- CPU Hand ---
         this.ui.cHand.innerHTML = '';
         cHand.forEach(() => {
             const el = document.createElement('div');
@@ -103,14 +115,20 @@ export class UIManager {
             this.ui.cHand.appendChild(el);
         });
 
-        // Table
+        // --- Table ---
         this.ui.table.innerHTML = '';
         melds.forEach((meld, idx) => {
             const grp = document.createElement('div');
             const isPending = turnMelds.includes(idx) && !hasOpened.human && turn === 'human';
             
             grp.className = `meld-group ${isPending ? 'pending' : ''}`;
-            grp.onclick = () => this.handleMeldClick(idx);
+            if (isActionPhase) {
+                grp.style.cursor = 'pointer';
+                grp.onclick = () => this.handleMeldClick(idx);
+            } else {
+                grp.style.cursor = 'default';
+                grp.onclick = null;
+            }
             
             meld.forEach(c => {
                 const el = document.createElement('div');
@@ -125,8 +143,18 @@ export class UIManager {
         this.ui.btnMeld.disabled = selectedCount < 1; 
         this.ui.btnDiscard.disabled = selectedCount !== 1;
         
-        if (turnMelds.length > 0 && !hasOpened.human) {
+        // --- Cancel / Undo Logic ---
+        const canUndoDraw = isActionPhase && drawnFromDiscardId && turnMelds.length === 0;
+        const canCancelMelds = turnMelds.length > 0 && !hasOpened.human;
+
+        if (canUndoDraw) {
             this.ui.btnCancel.style.display = 'block';
+            this.ui.btnCancel.innerText = 'Undo Draw';
+            this.ui.btnCancel.onclick = () => (window as any).game.undoDraw();
+        } else if (canCancelMelds) {
+            this.ui.btnCancel.style.display = 'block';
+            this.ui.btnCancel.innerText = 'Cancel Melds';
+            this.ui.btnCancel.onclick = () => (window as any).game.cancelMelds();
         } else {
             this.ui.btnCancel.style.display = 'none';
         }
@@ -145,9 +173,14 @@ export class UIManager {
         this.ui.modal.style.display = 'none';
     }
 
-    public showAlert(msg: string, title: string = 'Alert') {
+    public showAlert(msg: string, title: string = 'Alert', icon: string = '⚠️', isHtml: boolean = false) {
         this.ui.alertTitle.innerText = title;
-        this.ui.alertMsg.innerText = msg;
+        if (isHtml) {
+            this.ui.alertMsg.innerHTML = msg;
+        } else {
+            this.ui.alertMsg.innerText = msg;
+        }
+        this.ui.alertIcon.innerText = icon;
         this.ui.alertModal.style.display = 'flex';
     }
 
@@ -176,12 +209,13 @@ export class UIManager {
     }
 
     private handleCardClick(card: ICard) {
-        if (this.game.turn !== 'human' || this.game.phase !== 'action') return;
+        if (this.game.turn !== 'human') return; 
         card.selected = !card.selected;
         this.render();
     }
 
     private handleMeldClick(meldIdx: number) {
+        if (this.game.phase !== 'action') return;
         const selected = this.game.pHand.filter(c => c.selected);
         if (selected.length === 0) return;
 
@@ -203,11 +237,13 @@ export class UIManager {
     }
 
     public animateDraw(card: ICard, source: 'stock' | 'discard', onComplete: () => void) {
-        // ... (Unchanged)
         const sourceEl = source === 'stock' ? this.ui.stock : this.ui.discard;
         const targetEl = this.ui.pHand.querySelector(`[data-id="${card.id}"]`) as HTMLElement;
-        if (!sourceEl || !targetEl) { onComplete(); return; }
-        
+
+        if (!sourceEl || !targetEl) {
+            onComplete();
+            return;
+        }
         targetEl.style.opacity = '0';
         const flyer = document.createElement('div');
         flyer.className = `card ${card.getColor()} flying-card`;

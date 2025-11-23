@@ -148,7 +148,7 @@ body {
     left: 20px;
     transform: translateY(-50%);
     display: flex;
-    gap: 20px;
+    gap: 60px; 
     z-index: 10;
 }
 
@@ -173,19 +173,29 @@ body {
     justify-content: space-between;
     padding: 4px;
     box-sizing: border-box;
-    cursor: pointer;
+    cursor: default;
     transition: transform 0.1s, box-shadow 0.1s;
     user-select: none;
 }
 
-.card:hover {
+/* Only interactive cards bob and have pointer */
+.card.interactive {
+    cursor: pointer;
+}
+
+.card.interactive:hover {
     transform: translateY(-5px);
 }
 
 .card.selected {
     transform: translateY(-15px);
-    box-shadow: 0 0 10px yellow;
     border: 2px solid blue;
+}
+
+/* If a card is both selected and interactive (hovered), allow it to bump slightly higher/different 
+   to show it's active, or just stay selected. */
+.card.interactive.selected:hover {
+    transform: translateY(-18px);
 }
 
 .card-back {
@@ -249,7 +259,8 @@ body {
     display: flex;
     margin-right: 10px;
     margin-bottom: 10px;
-    border: 1px dashed rgba(255,255,255,0.3);
+    /* Border removed per request */
+    border: none;
     cursor: pointer;
 }
 
@@ -373,6 +384,33 @@ body {
     display: flex;
     justify-content: center;
     padding-bottom: 10px;
+}
+
+/* Alert Modal Specifics */
+.alert-window {
+    width: 350px;
+    max-width: 90vw;
+}
+
+.alert-body {
+    display: flex;
+    align-items: flex-start;
+    gap: 15px;
+    text-align: left;
+    padding: 15px;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.alert-icon {
+    font-size: 32px;
+    flex-shrink: 0;
+}
+
+.alert-content {
+    white-space: pre-wrap;
+    font-size: 13px;
+    line-height: 1.4;
 }
 
 /* Animation Class */

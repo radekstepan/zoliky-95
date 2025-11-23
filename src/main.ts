@@ -5,21 +5,18 @@ import "./style.css";
 const game = new GameState();
 const ui = new UIManager(game);
 
-const HELP_TEXT = `Jolly Rules:
-
-1. Opening: You must have at least one Pure Run (Straight Flush without Jokers) and total meld points of 36+ to open.
-
-2. Melds:
-   - Sets: 3 or 4 cards of same rank.
-   - Runs: 3+ consecutive cards of same suit.
-
-3. Ace Values:
-   - 1 point in A-2-3 run.
-   - 10 points in Q-K-A run or Sets.
-
-4. Jolly Hand: If you have 12 cards and can take the bottom card to meld EVERYTHING at once, you win immediately.
-
-5. Jokers: Can replace any card. Swap them from table if you have the card they represent.`;
+const HELP_HTML = `
+<b>Jolly Rules:</b><br><br>
+1. <b>Opening:</b> You must have at least one Pure Run (Straight Flush without Jokers) and total meld points of 36+ to open.<br><br>
+2. <b>Melds:</b><br>
+   - Sets: 3 or 4 cards of same rank (different suits).<br>
+   - Runs: 3+ consecutive cards of same suit.<br><br>
+3. <b>Ace Values:</b><br>
+   - 1 point in A-2-3 run.<br>
+   - 10 points in Q-K-A run or Sets.<br><br>
+4. <b>Jolly Hand:</b> If you have 12 cards and can take the bottom card to meld EVERYTHING at once, you win immediately.<br><br>
+5. <b>Jokers:</b> Can replace any card. Swap them from table if you have the card they represent.
+`;
 
 const App = {
     init: () => {
@@ -29,7 +26,8 @@ const App = {
     },
 
     showHelp: () => {
-        ui.showAlert(HELP_TEXT, "Help Topics");
+        // Use HTML render mode
+        ui.showAlert(HELP_HTML, "Help Topics", "❓", true);
     },
 
     humanDraw: (source: 'stock' | 'discard') => {
@@ -43,6 +41,16 @@ const App = {
             });
         } else {
             if (res.msg) ui.showAlert(res.msg);
+        }
+    },
+
+    undoDraw: () => {
+        const res = game.undoDraw();
+        if (res.success) {
+            ui.render();
+            ui.updateStatus("Draw undone. Select a pile.");
+        } else {
+            ui.showAlert(res.msg || "Cannot undo");
         }
     },
 
