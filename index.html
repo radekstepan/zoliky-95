@@ -22,7 +22,7 @@
     
     <div class="menu-bar">
         <div class="menu-item" onclick="window.game.init()">New Game</div>
-        <div class="menu-item" onclick="alert('Jolly Rules:\n1. Opening: Pure Run (no Joker) + 36 pts.\n2. Jolly Hand: If 12 cards, take bottom card & win instantly.\n3. Ace: 1 in A-2-3, 10 otherwise.\n4. Swap Joker: Trade hand card for table Joker.')">Help</div>
+        <div class="menu-item" onclick="window.game.showHelp()">Help</div>
     </div>
 
     <div class="game-area">
@@ -73,6 +73,22 @@
         <div class="modal-body" id="modal-msg">You Win!</div>
         <div class="modal-footer">
             <button class="win-btn" onclick="window.closeModal(); window.game.init();">Play Again</button>
+        </div>
+    </div>
+</div>
+
+<div id="alert-modal" class="modal-overlay">
+    <div class="modal-window alert-window">
+        <div class="title-bar">
+            <span id="alert-title">Alert</span>
+            <button onclick="window.closeAlert()">X</button>
+        </div>
+        <div class="alert-body">
+            <div id="alert-icon" class="alert-icon">⚠️</div>
+            <div id="alert-msg" class="alert-content"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="win-btn" onclick="window.closeAlert()">OK</button>
         </div>
     </div>
 </div>
