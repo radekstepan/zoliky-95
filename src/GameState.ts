@@ -57,6 +57,7 @@ export class GameState {
             if(c) this.cHand.push(c);
         }
 
+        // Initial sort for convenience
         sortHandLogic(this.pHand);
         sortHandLogic(this.cHand);
 
@@ -71,6 +72,13 @@ export class GameState {
         this.discardCardUsed = false;
         this.swappedJokerIds = [];
         this.isJollyTurn = false;
+    }
+
+    // New: Handle manual reordering
+    public reorderHand(fromIndex: number, toIndex: number) {
+        if (fromIndex < 0 || fromIndex >= this.pHand.length || toIndex < 0 || toIndex >= this.pHand.length) return;
+        const [card] = this.pHand.splice(fromIndex, 1);
+        this.pHand.splice(toIndex, 0, card);
     }
 
     public drawCard(source: 'stock' | 'discard'): { success: boolean; card?: ICard; msg?: string } {
@@ -103,7 +111,7 @@ export class GameState {
 
         if (this.turn === 'human') {
             this.pHand.push(card);
-            sortHandLogic(this.pHand);
+            // No auto-sort for human to enable manual sorting
         } else {
             this.cHand.push(card);
             sortHandLogic(this.cHand);
@@ -129,8 +137,7 @@ export class GameState {
         
         this.drawnFromDiscardId = null;
         this.phase = 'draw';
-        sortHandLogic(this.pHand);
-
+        
         return { success: true };
     }
 
@@ -205,11 +212,12 @@ export class GameState {
             joker.selected = false;
             this.pHand.push(joker);
             this.swappedJokerIds.push(joker.id);
-            sortHandLogic(this.pHand);
+            // No auto sort for human
         } else {
             this.cHand = this.cHand.filter(c => c.id !== handCardId);
             joker.representation = undefined;
             this.cHand.push(joker);
+            sortHandLogic(this.cHand);
         }
 
         return { success: true };
@@ -223,7 +231,6 @@ export class GameState {
 
         this.pHand.push(this.bottomCard);
         this.bottomCard = null; 
-        sortHandLogic(this.pHand);
         this.phase = 'action';
         this.isJollyTurn = true; 
         
@@ -239,7 +246,6 @@ export class GameState {
             this.melds.splice(idx, 1);
         }
         
-        sortHandLogic(this.pHand);
         this.pHand.forEach(c => c.selected = false);
         this.turnMelds = [];
         this.turnPoints = 0;

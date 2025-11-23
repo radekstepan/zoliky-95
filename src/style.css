@@ -247,6 +247,17 @@ body {
     margin-right: 0;
 }
 
+/* Dragging visual adjustments */
+.hand .card.dragging {
+    opacity: 0.5;
+    border: 2px dashed #ffff00;
+}
+
+.hand .card.drag-over {
+    transform: translateX(10px);
+    border-left: 2px solid #ffff00;
+}
+
 /* Ensure hovered card is on top */
 .hand .card:hover {
     z-index: 100;
@@ -259,7 +270,6 @@ body {
     display: flex;
     margin-right: 10px;
     margin-bottom: 10px;
-    /* Border removed per request */
     border: none;
     cursor: pointer;
 }
@@ -268,18 +278,22 @@ body {
     background: rgba(255,255,255,0.2);
 }
 
+/* Highlight valid target for drag/selection */
+.meld-group.valid-target {
+    box-shadow: 0 0 10px #ffff00;
+    background: rgba(255,255,0,0.2);
+    border: 1px solid #ffff00;
+}
+
 .meld-group .card {
-    /* Reduced overlap so values are visible on table */
     margin-right: -25px;
     transform: scale(0.8);
     transform-origin: top left;
-    /* Add width compensation for the scale */
     margin-bottom: -20px; 
 }
 
 .meld-group .card:last-child {
     margin-right: 0;
-    /* Fix width for the last scaled card */
     margin-right: -15px; 
 }
 
@@ -342,6 +356,13 @@ body {
 .win-btn:disabled {
     color: var(--win-dark);
     cursor: default;
+}
+
+/* Valid Move Highlight */
+.win-btn.valid-move {
+    background-color: #90ee90;
+    font-weight: bold;
+    border: 2px solid #008000;
 }
 
 /* Specific danger button for cancel */

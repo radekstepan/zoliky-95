@@ -22,11 +22,10 @@ const App = {
     init: () => {
         game.initGame();
         ui.render();
-        ui.updateStatus("Your turn. Discard a card to start.");
+        ui.updateStatus("Your turn. Draw a card.");
     },
 
     showHelp: () => {
-        // Use HTML render mode
         ui.showAlert(HELP_HTML, "Help Topics", "❓", true);
     },
 
@@ -56,10 +55,21 @@ const App = {
 
     humanMeld: () => {
         const selected = game.pHand.filter(c => c.selected);
+        // Capture Rects before Logic
+        const startRects: Record<number, DOMRect> = {};
+        selected.forEach(c => {
+            const el = ui.getCardElement(c.id);
+            if(el) startRects[c.id] = el.getBoundingClientRect();
+        });
+
         const res = game.attemptMeld(selected);
         
         if (res.success) {
             ui.render();
+            // The new meld is the last one
+            const newMeldIndex = game.melds.length - 1;
+            ui.animateToMeld(selected, startRects, newMeldIndex, () => {});
+
             if (!game.hasOpened.human) {
                 ui.updateStatus(`Pending Opening. Need Pure Run + 36pts. Current: ${game.turnPoints}`);
             }
@@ -74,25 +84,39 @@ const App = {
             ui.showAlert("Select exactly one card to discard.");
             return;
         }
+        
+        const card = selected[0];
+        const cardEl = ui.getCardElement(card.id);
+        const startRect = cardEl ? cardEl.getBoundingClientRect() : null;
 
-        const res = game.attemptDiscard(selected[0].id);
+        const res = game.attemptDiscard(card.id);
         if (res.success) {
-            if (res.winner) {
-                ui.showWinModal(`${res.winner} Wins! Opponent score: ${res.score}`);
-                return;
-            }
-            
             ui.render();
-            ui.updateStatus("CPU is thinking...");
             
-            setTimeout(() => {
-                const cpuRes = game.processCpuTurn();
-                if (cpuRes.winner) {
-                    ui.showWinModal(`${cpuRes.winner} Wins! You lose ${cpuRes.score} pts.`);
+            const finishTurn = () => {
+                if (res.winner) {
+                    ui.showWinModal(`${res.winner} Wins! Opponent score: ${res.score}`);
+                    return;
                 }
-                ui.render();
-                ui.updateStatus(`Round ${game.round}. Your turn.`);
-            }, 1000);
+                
+                ui.updateStatus("CPU is thinking...");
+                setTimeout(() => {
+                    const cpuRes = game.processCpuTurn();
+                    ui.sound.playDraw(); // CPU Draw Sound (simulated)
+                    
+                    if (cpuRes.winner) {
+                        ui.showWinModal(`${cpuRes.winner} Wins! You lose ${cpuRes.score} pts.`);
+                    }
+                    ui.render();
+                    ui.updateStatus(`Round ${game.round}. Your turn.`);
+                }, 1000);
+            };
+
+            if (startRect) {
+                ui.animateDiscard(card, startRect, finishTurn);
+            } else {
+                finishTurn();
+            }
 
         } else {
             ui.showAlert(res.msg || "Cannot discard");
@@ -104,6 +128,7 @@ const App = {
         if(res.success) {
             ui.render();
             ui.updateStatus(res.msg || "Jolly Hand Active!");
+            ui.sound.playWin();
         } else {
             ui.showAlert(res.msg || "Conditions not met");
         }
