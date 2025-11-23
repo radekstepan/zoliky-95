@@ -20,8 +20,11 @@ export class GameState {
 
     public turnMelds: number[] = []; 
     public turnPoints: number = 0;
+    
     public drawnFromDiscardId: number | null = null;
     public discardCardUsed: boolean = false;
+    public swappedJokerIds: number[] = [];
+    public isJollyTurn: boolean = false;
 
     constructor() {
         this.deck = new Deck();
@@ -38,18 +41,13 @@ export class GameState {
         this.round = 1;
         this.resetTurnState();
 
-        // Rule: "Player splits deck... looks at bottom 3. If Joker, keeps it."
         const cutJokers = this.deck.checkBottomThreeForJokers();
         if (cutJokers.length > 0) {
             this.pHand.push(...cutJokers);
         }
 
-        // Rule: "Bottom-most card turned face up"
         this.bottomCard = this.deck.removeBottom() || null;
 
-        // Deal cards
-        // Player (Left of Dealer) gets 13. Opponent gets 12.
-        // We adjust the loop to fill hands to target size.
         while (this.pHand.length < 13) {
             const c = this.deck.draw();
             if(c) this.pHand.push(c);
@@ -62,7 +60,6 @@ export class GameState {
         sortHandLogic(this.pHand);
         sortHandLogic(this.cHand);
 
-        // Player starts with 13 cards -> Action phase (must discard)
         this.turn = 'human';
         this.phase = 'action';
     }
@@ -72,6 +69,8 @@ export class GameState {
         this.turnPoints = 0;
         this.drawnFromDiscardId = null;
         this.discardCardUsed = false;
+        this.swappedJokerIds = [];
+        this.isJollyTurn = false;
     }
 
     public drawCard(source: 'stock' | 'discard'): { success: boolean; card?: ICard; msg?: string } {
@@ -83,7 +82,6 @@ export class GameState {
             card = this.deck.draw();
             if (!card) {
                 if (this.discardPile.length > 0) {
-                    // Rule: Reshuffle discard pile into deck
                     this.deck.setCards([...this.discardPile]);
                     this.deck.shuffle();
                     this.discardPile = [];
@@ -93,7 +91,6 @@ export class GameState {
                 }
             }
         } else {
-            // Rule: Cannot draw from discard until Round 3
             if (this.round < 3) {
                 return { success: false, msg: "Cannot draw from discard until Round 3." };
             }
@@ -120,6 +117,7 @@ export class GameState {
         if (this.phase !== 'action') return { success: false, msg: "Not in action phase." };
         if (!this.drawnFromDiscardId) return { success: false, msg: "Did not draw from discard." };
         if (this.turnMelds.length > 0) return { success: false, msg: "Cannot undo after melding." };
+        if (this.swappedJokerIds.length > 0) return { success: false, msg: "Cannot undo after swapping Jokers." };
 
         const cardIdx = this.pHand.findIndex(c => c.id === this.drawnFromDiscardId);
         if (cardIdx === -1) return { success: false, msg: "Card not found in hand." };
@@ -136,18 +134,29 @@ export class GameState {
         return { success: true };
     }
 
+    private checkRequirementUsage(cards: ICard[]) {
+        if (this.drawnFromDiscardId) {
+            if (cards.some(c => c.id === this.drawnFromDiscardId)) {
+                this.discardCardUsed = true;
+            }
+        }
+        if (this.swappedJokerIds.length > 0) {
+            const usedJokers = cards.filter(c => this.swappedJokerIds.includes(c.id));
+            usedJokers.forEach(j => {
+                const idx = this.swappedJokerIds.indexOf(j.id);
+                if (idx > -1) this.swappedJokerIds.splice(idx, 1);
+            });
+        }
+    }
+
     public attemptMeld(selectedCards: ICard[]): { success: boolean; msg?: string } {
         if (this.round < 3) return { success: false, msg: `Cannot meld until Round 3.` };
         
         const result = validateMeld(selectedCards);
         if (!result.valid) return { success: false, msg: "Invalid Meld. Check suits/ranks/adjacency." };
 
-        if (this.drawnFromDiscardId) {
-            const used = selectedCards.some(c => c.id === this.drawnFromDiscardId);
-            if (used) this.discardCardUsed = true;
-        }
+        this.checkRequirementUsage(selectedCards);
 
-        // Organize adds representations which are needed for UI
         const organized = organizeMeld(selectedCards);
 
         this.melds.push(organized);
@@ -161,13 +170,13 @@ export class GameState {
     }
 
     public attemptJokerSwap(meldIndex: number, handCardId: number): { success: boolean; msg?: string } {
-        if (!this.hasOpened.human) return { success: false, msg: "Must open before swapping Jokers." };
+        if (this.turn === 'human' && !this.hasOpened.human) return { success: false, msg: "Must open before swapping Jokers." };
+        if (this.turn === 'cpu' && !this.hasOpened.cpu) return { success: false, msg: "CPU must open before swap." };
         
         const meld = [...this.melds[meldIndex]];
         const jokerIdx = meld.findIndex(c => c.isJoker);
         if (jokerIdx === -1) return { success: false, msg: "No Joker in selected meld." };
 
-        // Rule: Set Constraint - "Need all 4 kinds to take Joker"
         const nonJokers = meld.filter(c => !c.isJoker);
         const isSet = nonJokers.every(c => c.rank === nonJokers[0].rank);
         
@@ -177,26 +186,31 @@ export class GameState {
             }
         }
 
-        const handCard = this.pHand.find(c => c.id === handCardId);
+        const hand = this.turn === 'human' ? this.pHand : this.cHand;
+        const handCard = hand.find(c => c.id === handCardId);
         if (!handCard) return { success: false, msg: "Card not in hand." };
 
         const joker = meld[jokerIdx];
         meld[jokerIdx] = handCard; 
 
-        // Re-validate/Organize to ensure fit
         const organized = organizeMeld(meld);
         const res = validateMeld(organized);
         if (!res.valid) return { success: false, msg: "Card does not fit in meld." };
 
         this.melds[meldIndex] = organized;
-        this.pHand = this.pHand.filter(c => c.id !== handCardId);
         
-        // Return Joker to hand
-        joker.representation = undefined;
-        joker.selected = false;
-        this.pHand.push(joker); 
-        
-        sortHandLogic(this.pHand);
+        if (this.turn === 'human') {
+            this.pHand = this.pHand.filter(c => c.id !== handCardId);
+            joker.representation = undefined;
+            joker.selected = false;
+            this.pHand.push(joker);
+            this.swappedJokerIds.push(joker.id);
+            sortHandLogic(this.pHand);
+        } else {
+            this.cHand = this.cHand.filter(c => c.id !== handCardId);
+            joker.representation = undefined;
+            this.cHand.push(joker);
+        }
 
         return { success: true };
     }
@@ -210,7 +224,8 @@ export class GameState {
         this.pHand.push(this.bottomCard);
         this.bottomCard = null; 
         sortHandLogic(this.pHand);
-        this.phase = 'action'; 
+        this.phase = 'action';
+        this.isJollyTurn = true; 
         
         return { success: true, msg: "Jolly Hand! You must meld ALL cards now to win." };
     }
@@ -223,14 +238,20 @@ export class GameState {
             this.pHand.push(...cards);
             this.melds.splice(idx, 1);
         }
+        
         sortHandLogic(this.pHand);
         this.pHand.forEach(c => c.selected = false);
         this.turnMelds = [];
         this.turnPoints = 0;
+        
         this.discardCardUsed = false;
     }
 
     public attemptDiscard(cardId: number): { success: boolean; msg?: string; winner?: string, score?: number } {
+        if (this.isJollyTurn && this.pHand.length > 1) {
+            return { success: false, msg: "Jolly Hand must meld ALL cards to win." };
+        }
+
         if (!this.hasOpened.human && this.turnMelds.length > 0) {
             if (this.turnPoints < 36) {
                 return { success: false, msg: `Opening melds must sum to 36+. Current: ${this.turnPoints}` };
@@ -248,6 +269,13 @@ export class GameState {
 
         if (this.drawnFromDiscardId && !this.discardCardUsed) {
              return { success: false, msg: "Must meld the card picked from discard pile." };
+        }
+
+        if (this.swappedJokerIds.some(id => this.pHand.some(c => c.id === id && c.id !== cardId))) {
+            return { success: false, msg: "Must meld the Swapped Joker(s)." };
+        }
+        if (this.swappedJokerIds.includes(cardId)) {
+            return { success: false, msg: "Cannot discard a Swapped Joker. Must meld it." };
         }
 
         const cardIdx = this.pHand.findIndex(c => c.id === cardId);
@@ -278,11 +306,7 @@ export class GameState {
         const res = validateMeld(organized);
         if (!res.valid) return { success: false, msg: "Cannot add cards to this meld." };
 
-        if (this.drawnFromDiscardId) {
-            if (selectedCards.some(c => c.id === this.drawnFromDiscardId)) {
-                this.discardCardUsed = true;
-            }
-        }
+        this.checkRequirementUsage(selectedCards);
 
         this.melds[meldIndex] = organized;
         const ids = selectedCards.map(c => c.id);
@@ -297,27 +321,42 @@ export class GameState {
         this.drawCard('stock'); 
 
         if (this.round >= 3) {
-            const move = calculateCpuMove(this.cHand, this.hasOpened.cpu);
+            const move = calculateCpuMove(this.cHand, this.hasOpened.cpu, this.melds);
             
+            if (move.jokerSwaps && move.jokerSwaps.length > 0) {
+                const swap = move.jokerSwaps[0];
+                this.attemptJokerSwap(swap.meldIndex, swap.handCardId);
+            }
+
             move.meldsToPlay.forEach(meld => {
                 if (!this.hasOpened.cpu) {
                     const res = validateMeld(meld);
                     if (res.type === 'run' && res.isPure) this.hasPureRun.cpu = true;
                 }
+                
                 const organized = organizeMeld(meld);
                 this.melds.push(organized);
                 this.cHand = this.cHand.filter(c => !meld.includes(c));
             });
 
-            if (!this.hasOpened.cpu) {
-                if (move.meldsToPlay.length > 0) this.hasOpened.cpu = true;
+            if (!this.hasOpened.cpu && move.meldsToPlay.length > 0) {
+                this.hasOpened.cpu = true;
             }
 
             if (move.discardCard) {
                 const d = move.discardCard;
-                this.cHand = this.cHand.filter(c => c.id !== d.id);
-                if (this.cHand.length === 0) return { winner: "CPU", score: this.pHand.length * -1 };
-                this.discardPile.push(d);
+                if (this.cHand.some(c => c.id === d.id)) {
+                    this.cHand = this.cHand.filter(c => c.id !== d.id);
+                    if (this.cHand.length === 0) return { winner: "CPU", score: this.pHand.length * -1 };
+                    this.discardPile.push(d);
+                } else {
+                    if (this.cHand.length > 0) {
+                         const rand = this.cHand.pop()!;
+                         this.discardPile.push(rand);
+                    } else {
+                        return { winner: "CPU", score: this.pHand.length * -1 };
+                    }
+                }
             }
         } else {
             const randIdx = Math.floor(Math.random() * this.cHand.length);

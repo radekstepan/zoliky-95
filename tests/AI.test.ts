@@ -10,7 +10,7 @@ describe('AI Logic', () => {
             new Card('♣', 'K', 3),
             new Card('♥', '2', 4)
         ];
-        const move = calculateCpuMove(hand, true);
+        const move = calculateCpuMove(hand, true, []);
         expect(move.meldsToPlay.length).toBeGreaterThan(0);
     });
 
@@ -21,7 +21,7 @@ describe('AI Logic', () => {
             new Card('♣', '2', 3), 
             new Card('♥', 'A', 4)
         ];
-        const move = calculateCpuMove(hand, false);
+        const move = calculateCpuMove(hand, false, []);
         expect(move.meldsToPlay.length).toBe(0);
     });
 
@@ -35,11 +35,28 @@ describe('AI Logic', () => {
             new Card('♦', '5', 6)  // Set (15pts) -> Total 45
         ];
 
-        const move = calculateCpuMove(hand, false);
+        const move = calculateCpuMove(hand, false, []);
         
-        // Now that AI scans for runs, this should succeed
         expect(move.meldsToPlay.length).toBeGreaterThan(0);
         const hasRun = move.meldsToPlay.some(m => m[0].suit === m[1].suit);
         expect(hasRun).toBe(true);
+    });
+
+    it('should identify joker swap in a set', () => {
+        // Table: 4H, 4D, 4C, Joker
+        const tableMeld = [
+            new Card('♥', '4', 10),
+            new Card('♦', '4', 11),
+            new Card('♣', '4', 12),
+            new Card('JK', 'Joker', 13)
+        ];
+        // Hand: 4S
+        const hand = [ new Card('♠', '4', 20) ];
+        
+        // Opened = true to allow swaps
+        const move = calculateCpuMove(hand, true, [tableMeld]);
+        
+        expect(move.jokerSwaps.length).toBe(1);
+        expect(move.jokerSwaps[0].handCardId).toBe(20);
     });
 });
