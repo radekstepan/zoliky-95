@@ -250,13 +250,21 @@ export class UIManager {
     private renderCardInner(c: ICard): string {
         if (c.isJoker) {
             const rep = c.representation;
-            const topContent = rep ? `<span>${rep.rank}</span><span>${rep.suit}</span>` : `<span>🤡</span>`;
-            const botContent = rep ? `<span>${rep.rank}</span><span>${rep.suit}</span>` : `<span>🤡</span>`;
+            const jesterSvg = `
+            <svg viewBox="0 0 100 100" style="width: 100%; height: 100%;">
+                <path d="M50,50 C30,75 10,75 10,50 C10,25 30,25 50,50 C70,75 90,75 90,50 C90,25 70,25 50,50 Z" 
+                      fill="none" stroke="#800080" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>`;
+
+            const smallJester = `<span style="font-size: 12px; color: #800080;">JOKER</span>`;
+
+            const topContent = rep ? `<span>${rep.rank}</span><span>${rep.suit}</span>` : smallJester;
+            const botContent = rep ? `<span>${rep.rank}</span><span>${rep.suit}</span>` : smallJester;
             const style = rep ? 'color: gray; opacity: 0.7;' : '';
 
             return `
                 <div class="card-top" style="${style}">${topContent}</div>
-                <div class="card-center">🃏</div>
+                <div class="card-center" style="width: 60%; height: 60%;">${jesterSvg}</div>
                 <div class="card-bottom" style="${style}">${botContent}</div>
             `;
         }

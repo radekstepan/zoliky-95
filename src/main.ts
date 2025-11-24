@@ -32,7 +32,7 @@ const App = {
     humanDraw: (source: 'stock' | 'discard') => {
         const res = game.drawCard(source);
         if (res.success && res.card) {
-            ui.render(); 
+            ui.render();
             ui.animateDraw(res.card, source, () => {
                 let msg = "Meld cards or Discard to end turn.";
                 if (game.drawnFromDiscardId) msg = "You drew from discard. You MUST meld this card!";
@@ -59,16 +59,16 @@ const App = {
         const startRects: Record<number, DOMRect> = {};
         selected.forEach(c => {
             const el = ui.getCardElement(c.id);
-            if(el) startRects[c.id] = el.getBoundingClientRect();
+            if (el) startRects[c.id] = el.getBoundingClientRect();
         });
 
         const res = game.attemptMeld(selected);
-        
+
         if (res.success) {
             ui.render();
             // The new meld is the last one
             const newMeldIndex = game.melds.length - 1;
-            ui.animateToMeld(selected, startRects, newMeldIndex, () => {});
+            ui.animateToMeld(selected, startRects, newMeldIndex, () => { });
 
             if (!game.hasOpened.human) {
                 ui.updateStatus(`Pending Opening. Need Pure Run + 36pts. Current: ${game.turnPoints}`);
@@ -84,7 +84,7 @@ const App = {
             ui.showAlert("Select exactly one card to discard.");
             return;
         }
-        
+
         const card = selected[0];
         const cardEl = ui.getCardElement(card.id);
         const startRect = cardEl ? cardEl.getBoundingClientRect() : null;
@@ -92,18 +92,18 @@ const App = {
         const res = game.attemptDiscard(card.id);
         if (res.success) {
             ui.render();
-            
+
             const finishTurn = () => {
                 if (res.winner) {
                     ui.showWinModal(`${res.winner} Wins! Opponent score: ${res.score}`);
                     return;
                 }
-                
+
                 ui.updateStatus("CPU is thinking...");
                 setTimeout(() => {
                     const cpuRes = game.processCpuTurn();
                     ui.sound.playDraw(); // CPU Draw Sound (simulated)
-                    
+
                     if (cpuRes.winner) {
                         ui.showWinModal(`${cpuRes.winner} Wins! You lose ${cpuRes.score} pts.`);
                     }
@@ -125,7 +125,7 @@ const App = {
 
     attemptJolly: () => {
         const res = game.attemptJollyHand();
-        if(res.success) {
+        if (res.success) {
             ui.render();
             ui.updateStatus(res.msg || "Jolly Hand Active!");
             ui.sound.playWin();
@@ -151,6 +151,7 @@ const App = {
 
 (window as any).game = App;
 (window as any).closeModal = App.closeModal;
+(window as any).closeAlert = App.closeAlert;
 (window as any).closeAlert = App.closeAlert;
 
 App.init();
