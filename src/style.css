@@ -135,6 +135,8 @@ body {
     flex: 1;
     position: relative;
     padding: 20px;
+    padding-left: 140px;
+    /* Make room for deck area (stock + discard) */
     overflow-y: auto;
     display: flex;
     flex-wrap: wrap;
@@ -143,7 +145,7 @@ body {
 }
 
 .player-zone {
-    height: 160px;
+    height: 180px;
     background: rgba(0, 0, 0, 0.2);
     display: flex;
     flex-direction: column;
@@ -303,9 +305,7 @@ body {
 
 /* Highlight valid target for drag/selection */
 .meld-group.valid-target {
-    box-shadow: 0 0 10px #ffff00;
-    background: rgba(255, 255, 0, 0.2);
-    border: 1px solid #ffff00;
+    /* Cursor pointer is set via JS, no visual highlighting */
 }
 
 .meld-group .card {
@@ -388,9 +388,7 @@ body {
 
 /* Valid Move Highlight */
 .win-btn.valid-move {
-    background-color: #90ee90;
-    font-weight: bold;
-    border: 2px solid #008000;
+    /* No visual highlighting - removed green background */
 }
 
 /* Specific danger button for cancel */
@@ -401,7 +399,7 @@ body {
 .actions-bar {
     display: flex;
     gap: 10px;
-    margin-bottom: 5px;
+    margin-bottom: 25px;
 }
 
 /* Modal */

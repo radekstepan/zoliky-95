@@ -23,54 +23,62 @@ export function organizeMeld(cards: ICard[]): ICard[] {
     const validRes = validateMeld(cards);
     if (!validRes.valid || !validRes.type) return cards;
 
-    cards.forEach(c => c.representation = undefined);
-
+    // DON'T clear existing representations - preserve Joker positions
     const jokers = cards.filter(c => c.isJoker);
     const nonJokers = cards.filter(c => !c.isJoker);
+
+    // Separate Jokers into those with and without representations
+    const jokersWithRep = jokers.filter(j => j.representation !== undefined);
+    const jokersWithoutRep = jokers.filter(j => j.representation === undefined);
 
     if (validRes.type === 'set') {
         const rank = nonJokers[0].rank;
         const usedSuits = new Set(nonJokers.map(c => c.suit));
+
+        // Also mark suits used by Jokers with existing representations
+        jokersWithRep.forEach(j => {
+            if (j.representation) usedSuits.add(j.representation.suit);
+        });
+
         const allSuits: Suit[] = ['♥', '♦', '♣', '♠'];
-        
+
+        // Only assign representations to Jokers that don't have them
         let jokerIdx = 0;
-        for(const s of allSuits) {
-            if (!usedSuits.has(s) && jokerIdx < jokers.length) {
-                jokers[jokerIdx].representation = { rank: rank, suit: s };
+        for (const s of allSuits) {
+            if (!usedSuits.has(s) && jokerIdx < jokersWithoutRep.length) {
+                jokersWithoutRep[jokerIdx].representation = { rank: rank, suit: s };
                 jokerIdx++;
             }
         }
-        
+
         const combined = [...nonJokers, ...jokers];
-        combined.sort((a,b) => {
+        combined.sort((a, b) => {
             const sA = a.representation?.suit || a.suit;
             const sB = b.representation?.suit || b.suit;
             return SUITS.indexOf(sA) - SUITS.indexOf(sB);
         });
         return combined;
-    } 
+    }
 
     if (validRes.type === 'run') {
         const hasAce = nonJokers.some(c => c.rank === 'A');
         let isAceLow = false;
         if (hasAce) {
-             const lowRanks = ['2', '3', '4', '5'];
-             if (nonJokers.some(c => lowRanks.includes(c.rank))) isAceLow = true;
+            const lowRanks = ['2', '3', '4', '5'];
+            if (nonJokers.some(c => lowRanks.includes(c.rank))) isAceLow = true;
         }
 
-        nonJokers.sort((a,b) => {
-            let oa = a.getOrder(); 
+        nonJokers.sort((a, b) => {
+            let oa = a.getOrder();
             let ob = b.getOrder();
-            if(isAceLow) {
-                if(a.rank === 'A') oa = -1;
-                if(b.rank === 'A') ob = -1;
+            if (isAceLow) {
+                if (a.rank === 'A') oa = -1;
+                if (b.rank === 'A') ob = -1;
             }
             return oa - ob;
         });
 
         const suit = nonJokers[0].suit;
-        const finalSeq: ICard[] = [];
-        let currentRankIdx = -999; 
 
         const getRankIdx = (c: ICard) => {
             if (isAceLow && c.rank === 'A') return -1;
@@ -81,54 +89,76 @@ export function organizeMeld(cards: ICard[]): ICard[] {
             return RANKS[idx];
         };
 
-        for(let i=0; i<nonJokers.length; i++) {
-            const card = nonJokers[i];
-            const idx = getRankIdx(card);
-            
+        // Build sequence including Jokers with existing representations
+        const allCardsInSequence: Array<{ card: ICard, idx: number, isJoker: boolean }> = [];
+
+        // Add non-Jokers
+        nonJokers.forEach(c => {
+            allCardsInSequence.push({ card: c, idx: getRankIdx(c), isJoker: false });
+        });
+
+        // Add Jokers with representations
+        jokersWithRep.forEach(j => {
+            if (j.representation) {
+                const idx = getRankIdx({ rank: j.representation.rank, getOrder: () => RANKS.indexOf(j.representation!.rank) } as ICard);
+                allCardsInSequence.push({ card: j, idx: idx, isJoker: true });
+            }
+        });
+
+        // Sort by position
+        allCardsInSequence.sort((a, b) => a.idx - b.idx);
+
+        const finalSeq: ICard[] = [];
+        let availableJokers = [...jokersWithoutRep];
+
+        for (let i = 0; i < allCardsInSequence.length; i++) {
+            const item = allCardsInSequence[i];
+
             if (i === 0) {
-                finalSeq.push(card);
-                currentRankIdx = idx;
+                finalSeq.push(item.card);
             } else {
-                const diff = idx - currentRankIdx;
+                const prevItem = allCardsInSequence[i - 1];
+                const diff = item.idx - prevItem.idx;
+
+                // Fill gaps with available Jokers
                 if (diff > 1) {
                     const needed = diff - 1;
-                    for(let k=0; k<needed; k++) {
-                        if (jokers.length > 0) {
-                            const j = jokers.shift()!;
-                            const repRankIdx = currentRankIdx + 1 + k;
+                    for (let k = 0; k < needed; k++) {
+                        if (availableJokers.length > 0) {
+                            const j = availableJokers.shift()!;
+                            const repRankIdx = prevItem.idx + 1 + k;
                             j.representation = { rank: getRankFromIdx(repRankIdx), suit: suit };
                             finalSeq.push(j);
                         }
                     }
                 }
-                finalSeq.push(card);
-                currentRankIdx = idx;
+                finalSeq.push(item.card);
             }
         }
 
-        while(jokers.length > 0) {
-            const j = jokers.shift()!;
-            const nextIdx = currentRankIdx + 1;
-            
-            if (nextIdx < RANKS.length) { 
-                 j.representation = { rank: getRankFromIdx(nextIdx), suit: suit };
-                 finalSeq.push(j);
-                 currentRankIdx++;
-            } else {
-                const firstCard = finalSeq[0];
-                const firstRank = firstCard.representation ? firstCard.representation.rank : firstCard.rank;
-                let firstIdx = RANKS.indexOf(firstRank);
-                if (firstRank === 'A' && isAceLow) firstIdx = -1;
+        // Handle remaining Jokers (add to ends)
+        const currentStart = allCardsInSequence.length > 0 ? allCardsInSequence[0].idx : 0;
+        const currentEnd = allCardsInSequence.length > 0 ? allCardsInSequence[allCardsInSequence.length - 1].idx : 0;
 
+        while (availableJokers.length > 0) {
+            const j = availableJokers.shift()!;
+            const nextIdx = currentEnd + (finalSeq.length - allCardsInSequence.length);
+
+            if (nextIdx < RANKS.length) {
+                j.representation = { rank: getRankFromIdx(nextIdx + 1), suit: suit };
+                finalSeq.push(j);
+            } else {
+                const firstIdx = currentStart;
                 const prevIdx = firstIdx - 1;
-                if (prevIdx >= -1) { 
-                     j.representation = { rank: getRankFromIdx(prevIdx), suit: suit };
-                     finalSeq.unshift(j);
+                if (prevIdx >= -1) {
+                    j.representation = { rank: getRankFromIdx(prevIdx), suit: suit };
+                    finalSeq.unshift(j);
                 } else {
                     finalSeq.push(j);
                 }
             }
         }
+
         return finalSeq;
     }
     return cards;
@@ -137,20 +167,20 @@ export function organizeMeld(cards: ICard[]): ICard[] {
 export function validateMeld(cards: ICard[]): MeldResult {
     const jokerCount = cards.filter(c => c.isJoker).length;
     const nonJokers = cards.filter(c => !c.isJoker);
-    
-    if (cards.length < 3) return { valid: false, points: 0 }; 
-    
+
+    if (cards.length < 3) return { valid: false, points: 0 };
+
     // 1. Set Check
     if (nonJokers.length > 0) {
         const firstRank = nonJokers[0].rank;
         const isSet = nonJokers.every(c => c.rank === firstRank);
         if (isSet) {
-             const suits = nonJokers.map(c => c.suit);
-             const uniqueSuits = new Set(suits);
-             if (uniqueSuits.size !== suits.length) return { valid: false, points: 0 };
+            const suits = nonJokers.map(c => c.suit);
+            const uniqueSuits = new Set(suits);
+            if (uniqueSuits.size !== suits.length) return { valid: false, points: 0 };
 
-             const val = getRankValue(firstRank, false);
-             return { valid: true, points: val * cards.length, type: 'set', isPure: jokerCount === 0 };
+            const val = getRankValue(firstRank, false);
+            return { valid: true, points: val * cards.length, type: 'set', isPure: jokerCount === 0 };
         }
     }
 
@@ -181,11 +211,11 @@ export function validateMeld(cards: ICard[]): MeldResult {
 
                 for (let i = 0; i < sorted.length - 1; i++) {
                     const idxA = getIdx(sorted[i]);
-                    const idxB = getIdx(sorted[i+1]);
+                    const idxB = getIdx(sorted[i + 1]);
                     const diff = idxB - idxA;
-                    
-                    if (diff < 1) return { valid: false, points: 0 }; 
-                    
+
+                    if (diff < 1) return { valid: false, points: 0 };
+
                     // Rule: Adjacent Jokers are invalid
                     // A diff of > 2 implies 2 or more missing cards adjacent to each other
                     // e.g., 4 ... 7 (diff=3, missing 5,6). Requires 2 adjacent Jokers.
@@ -194,10 +224,10 @@ export function validateMeld(cards: ICard[]): MeldResult {
                     const missingCount = diff - 1;
                     gaps += missingCount;
 
-                    for(let k=1; k<=missingCount; k++) {
+                    for (let k = 1; k <= missingCount; k++) {
                         const missingRankIdx = idxA + k;
                         let rankVal = 0;
-                        if (missingRankIdx === -1) rankVal = 1; 
+                        if (missingRankIdx === -1) rankVal = 1;
                         else {
                             const r = RANKS[missingRankIdx];
                             rankVal = getRankValue(r, treatAceLow);
@@ -219,19 +249,19 @@ export function validateMeld(cards: ICard[]): MeldResult {
                 // So we can add max 1 to Left and max 1 to Right.
                 const remainingJokers = jokerCount - gaps;
                 if (remainingJokers > 2) return { valid: false, points: 0 }; // Impossible to separate
-                
+
                 // Even if 2 remaining, if we can only fit them on ONE end (e.g. A, 2... can't go lower),
                 // then we have 2 on one end -> Invalid.
-                
-                let rightIdx = getIdx(sorted[sorted.length-1]);
+
+                let rightIdx = getIdx(sorted[sorted.length - 1]);
                 let leftIdx = getIdx(sorted[0]);
-                
+
                 let addedRight = 0;
                 let addedLeft = 0;
                 let pending = remainingJokers;
-                
+
                 // Strategy: Fill where possible.
-                while(pending > 0) {
+                while (pending > 0) {
                     let placed = false;
                     // Try Right
                     if (addedRight === 0 && rightIdx < RANKS.length - 1) {
@@ -241,7 +271,7 @@ export function validateMeld(cards: ICard[]): MeldResult {
                         points += getRankValue(r, treatAceLow);
                         placed = true;
                         pending--;
-                    } 
+                    }
                     // Try Left
                     else if (addedLeft === 0 && pending > 0 && leftIdx > (treatAceLow ? -1 : 0)) {
                         leftIdx--;
@@ -251,7 +281,7 @@ export function validateMeld(cards: ICard[]): MeldResult {
                         placed = true;
                         pending--;
                     }
-                    
+
                     if (!placed && pending > 0) {
                         // Cannot separate the jokers or cannot fit them
                         return { valid: false, points: 0 };

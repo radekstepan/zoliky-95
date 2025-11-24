@@ -184,22 +184,29 @@ export class GameState {
         const jokerIdx = meld.findIndex(c => c.isJoker);
         if (jokerIdx === -1) return { success: false, msg: "No Joker in selected meld." };
 
-        const nonJokers = meld.filter(c => !c.isJoker);
-        const isSet = nonJokers.every(c => c.rank === nonJokers[0].rank);
+        const joker = meld[jokerIdx];
 
-        if (isSet) {
-            if (nonJokers.length < 3) {
-                return { success: false, msg: "Sets need 4 suits to swap Joker." };
-            }
+        // Joker must have a representation (fixed position)
+        if (!joker.representation) {
+            return { success: false, msg: "Joker position not set." };
         }
 
         const hand = this.turn === 'human' ? this.pHand : this.cHand;
         const handCard = hand.find(c => c.id === handCardId);
         if (!handCard) return { success: false, msg: "Card not in hand." };
 
-        const joker = meld[jokerIdx];
+        // The hand card MUST exactly match the Joker's representation
+        if (handCard.rank !== joker.representation.rank || handCard.suit !== joker.representation.suit) {
+            return {
+                success: false,
+                msg: `Joker represents ${joker.representation.rank}${joker.representation.suit}. You need that exact card to swap.`
+            };
+        }
+
+        // Swap the cards
         meld[jokerIdx] = handCard;
 
+        // Validate the meld still works with the swap
         const organized = organizeMeld(meld);
         const res = validateMeld(organized);
         if (!res.valid) return { success: false, msg: "Card does not fit in meld." };
