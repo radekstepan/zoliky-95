@@ -461,4 +461,79 @@ export class UIManager {
             onComplete();
         }, 500);
     }
+
+    public animateCpuDiscard(card: ICard, onComplete: () => void) {
+        this.sound.playSnap();
+
+        // Get the position of the last CPU hand card (rightmost)
+        const cpuCards = this.ui.cHand.querySelectorAll('.card');
+        const lastCard = cpuCards[cpuCards.length - 1] as HTMLElement;
+        const startRect = lastCard ? lastCard.getBoundingClientRect() : this.ui.cHand.getBoundingClientRect();
+
+        const flyer = document.createElement('div');
+        flyer.className = `card ${card.getColor()} flying-card`;
+        flyer.innerHTML = this.renderCardInner(card);
+
+        flyer.style.left = startRect.left + 'px';
+        flyer.style.top = startRect.top + 'px';
+        flyer.style.width = startRect.width + 'px';
+        flyer.style.height = startRect.height + 'px';
+
+        document.body.appendChild(flyer);
+        flyer.offsetHeight;
+
+        const endRect = this.ui.discard.getBoundingClientRect();
+
+        flyer.style.left = endRect.left + 'px';
+        flyer.style.top = endRect.top + 'px';
+
+        setTimeout(() => {
+            if (document.body.contains(flyer)) document.body.removeChild(flyer);
+            onComplete();
+        }, 500);
+    }
+
+    public animateCpuDraw(source: 'stock' | 'discard', onComplete: () => void) {
+        this.sound.playDraw();
+
+        const sourceEl = source === 'stock' ? this.ui.stock : this.ui.discard;
+        const startRect = sourceEl.getBoundingClientRect();
+
+        // Get the end position (rightmost CPU hand position after adding a card)
+        const cpuCards = this.ui.cHand.querySelectorAll('.card');
+        const lastCard = cpuCards[cpuCards.length - 1] as HTMLElement;
+        const endRect = lastCard ? lastCard.getBoundingClientRect() : this.ui.cHand.getBoundingClientRect();
+
+        const flyer = document.createElement('div');
+
+        if (source === 'stock') {
+            // Animate a card-back for stock draws
+            flyer.className = 'card card-back flying-card';
+        } else {
+            // Animate the actual discard card face
+            const topDiscard = this.game.discardPile[this.game.discardPile.length - 1];
+            if (topDiscard) {
+                flyer.className = `card ${topDiscard.getColor()} flying-card`;
+                flyer.innerHTML = this.renderCardInner(topDiscard);
+            } else {
+                flyer.className = 'card card-back flying-card';
+            }
+        }
+
+        flyer.style.left = startRect.left + 'px';
+        flyer.style.top = startRect.top + 'px';
+        flyer.style.width = startRect.width + 'px';
+        flyer.style.height = startRect.height + 'px';
+
+        document.body.appendChild(flyer);
+        flyer.offsetHeight;
+
+        flyer.style.left = endRect.left + 'px';
+        flyer.style.top = endRect.top + 'px';
+
+        setTimeout(() => {
+            if (document.body.contains(flyer)) document.body.removeChild(flyer);
+            onComplete();
+        }, 500);
+    }
 }

@@ -102,13 +102,45 @@ const App = {
                 ui.updateStatus("CPU is thinking...");
                 setTimeout(() => {
                     const cpuRes = game.processCpuTurn();
-                    ui.sound.playDraw(); // CPU Draw Sound (simulated)
 
-                    if (cpuRes.winner) {
-                        ui.showWinModal(`${cpuRes.winner} Wins! You lose ${cpuRes.score} pts.`);
+                    // Animate CPU draw first
+                    if (cpuRes.drawSource) {
+                        ui.animateCpuDraw(cpuRes.drawSource, () => {
+                            // Then animate CPU discard if there was one
+                            if (cpuRes.discardedCard) {
+                                ui.animateCpuDiscard(cpuRes.discardedCard, () => {
+                                    if (cpuRes.winner) {
+                                        ui.showWinModal(`${cpuRes.winner} Wins! You lose ${cpuRes.score} pts.`);
+                                    }
+                                    ui.render();
+                                    ui.updateStatus(`Round ${game.round}. Your turn.`);
+                                });
+                            } else {
+                                if (cpuRes.winner) {
+                                    ui.showWinModal(`${cpuRes.winner} Wins! You lose ${cpuRes.score} pts.`);
+                                }
+                                ui.render();
+                                ui.updateStatus(`Round ${game.round}. Your turn.`);
+                            }
+                        });
+                    } else {
+                        // Fallback if no drawSource (shouldn't happen)
+                        if (cpuRes.discardedCard) {
+                            ui.animateCpuDiscard(cpuRes.discardedCard, () => {
+                                if (cpuRes.winner) {
+                                    ui.showWinModal(`${cpuRes.winner} Wins! You lose ${cpuRes.score} pts.`);
+                                }
+                                ui.render();
+                                ui.updateStatus(`Round ${game.round}. Your turn.`);
+                            });
+                        } else {
+                            if (cpuRes.winner) {
+                                ui.showWinModal(`${cpuRes.winner} Wins! You lose ${cpuRes.score} pts.`);
+                            }
+                            ui.render();
+                            ui.updateStatus(`Round ${game.round}. Your turn.`);
+                        }
                     }
-                    ui.render();
-                    ui.updateStatus(`Round ${game.round}. Your turn.`);
                 }, 1000);
             };
 
