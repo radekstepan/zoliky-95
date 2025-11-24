@@ -13,7 +13,7 @@
 
 @font-face {
     font-family: 'PixelSans';
-    src: local('MS Sans Serif'), local('Arial'); 
+    src: local('MS Sans Serif'), local('Arial');
     /* Fallback to Arial, aiming for system sans-serif look */
 }
 
@@ -41,7 +41,7 @@ body {
     border-bottom: 2px solid var(--win-darker);
     display: flex;
     flex-direction: column;
-    box-shadow: 4px 4px 10px rgba(0,0,0,0.5);
+    box-shadow: 4px 4px 10px rgba(0, 0, 0, 0.5);
 }
 
 .title-bar {
@@ -59,7 +59,8 @@ body {
     width: 16px;
     height: 16px;
     margin-right: 5px;
-    background: white; /* Placeholder for icon */
+    background: white;
+    /* Placeholder for icon */
     display: inline-block;
     vertical-align: middle;
     border-radius: 2px;
@@ -90,9 +91,20 @@ body {
     padding: 2px 8px;
     cursor: pointer;
 }
+
 .menu-item:hover {
     background-color: var(--win-blue);
     color: white;
+}
+
+.menu-item.disabled {
+    color: var(--win-dark);
+    cursor: default;
+}
+
+.menu-item.disabled:hover {
+    background-color: transparent;
+    color: var(--win-dark);
 }
 
 /* Game Area */
@@ -132,7 +144,7 @@ body {
 
 .player-zone {
     height: 160px;
-    background: rgba(0,0,0,0.2);
+    background: rgba(0, 0, 0, 0.2);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -144,11 +156,12 @@ body {
 /* Decks */
 .deck-area {
     position: absolute;
-    top: 50%;
+    top: calc(50% - 20px);
     left: 20px;
     transform: translateY(-50%);
     display: flex;
-    gap: 60px; 
+    flex-direction: column;
+    gap: 60px;
     z-index: 10;
 }
 
@@ -156,7 +169,7 @@ body {
     color: white;
     font-size: 12px;
     text-align: center;
-    margin-top: 5px;
+    margin-bottom: 5px;
     text-shadow: 1px 1px 0 #000;
 }
 
@@ -166,7 +179,7 @@ body {
     height: var(--card-height);
     background-color: white;
     border-radius: 4px;
-    box-shadow: 1px 1px 3px rgba(0,0,0,0.5);
+    box-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5);
     position: relative;
     display: flex;
     flex-direction: column;
@@ -189,7 +202,6 @@ body {
 
 .card.selected {
     transform: translateY(-15px);
-    border: 2px solid blue;
 }
 
 /* If a card is both selected and interactive (hovered), allow it to bump slightly higher/different 
@@ -199,17 +211,16 @@ body {
 }
 
 .card-back {
-    background: repeating-linear-gradient(
-        45deg,
-        #000080,
-        #000080 5px,
-        #ffffff 5px,
-        #ffffff 6px
-    );
+    background: repeating-linear-gradient(45deg,
+            #000080,
+            #000080 5px,
+            #ffffff 5px,
+            #ffffff 6px);
     border: 2px solid white;
 }
 
-.card-top, .card-bottom {
+.card-top,
+.card-bottom {
     font-weight: bold;
     font-size: 14px;
     display: flex;
@@ -230,8 +241,13 @@ body {
     font-size: 32px;
 }
 
-.red { color: #d00000; }
-.black { color: #000; }
+.red {
+    color: #d00000;
+}
+
+.black {
+    color: #000;
+}
 
 /* Hand Layout */
 .hand {
@@ -241,8 +257,10 @@ body {
 }
 
 .hand .card {
-    margin-right: -25px; /* Reduced overlap to show values */
+    margin-right: -25px;
+    /* Reduced overlap to show values */
 }
+
 .hand .card:last-child {
     margin-right: 0;
 }
@@ -264,7 +282,7 @@ body {
 }
 
 .meld-group {
-    background: rgba(255,255,255,0.1);
+    background: rgba(255, 255, 255, 0.1);
     padding: 5px;
     border-radius: 4px;
     display: flex;
@@ -275,13 +293,13 @@ body {
 }
 
 .meld-group:hover {
-    background: rgba(255,255,255,0.2);
+    background: rgba(255, 255, 255, 0.2);
 }
 
 /* Highlight valid target for drag/selection */
 .meld-group.valid-target {
     box-shadow: 0 0 10px #ffff00;
-    background: rgba(255,255,0,0.2);
+    background: rgba(255, 255, 0, 0.2);
     border: 1px solid #ffff00;
 }
 
@@ -289,12 +307,12 @@ body {
     margin-right: -25px;
     transform: scale(0.8);
     transform-origin: top left;
-    margin-bottom: -20px; 
+    margin-bottom: -20px;
 }
 
 .meld-group .card:last-child {
     margin-right: 0;
-    margin-right: -15px; 
+    margin-right: -15px;
 }
 
 .meld-group .card:hover {
@@ -304,7 +322,7 @@ body {
 
 /* Unconfirmed Melds */
 .meld-group.pending {
-    background: rgba(255, 255, 255, 0.15); 
+    background: rgba(255, 255, 255, 0.15);
 }
 
 /* Controls Bar at Bottom */
@@ -326,8 +344,13 @@ body {
     color: black;
 }
 
-.status-msg { flex: 1; }
-.status-score { width: 140px; }
+.status-msg {
+    flex: 1;
+}
+
+.status-score {
+    width: 140px;
+}
 
 /* Buttons */
 .win-btn {
@@ -379,8 +402,11 @@ body {
 /* Modal */
 .modal-overlay {
     position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0,0,0,0.4);
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.4);
     display: none;
     justify-content: center;
     align-items: center;
@@ -440,5 +466,5 @@ body {
     z-index: 1000;
     transition: all 0.5s ease-in-out;
     pointer-events: none;
-    box-shadow: 5px 5px 15px rgba(0,0,0,0.5) !important;
+    box-shadow: 5px 5px 15px rgba(0, 0, 0, 0.5) !important;
 }

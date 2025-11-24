@@ -16,8 +16,8 @@ export class UIManager {
         status: document.getElementById('status-text')!,
         score: document.getElementById('score-text')!,
         btnMeld: document.getElementById('btn-meld') as HTMLButtonElement,
-        btnCancel: document.getElementById('btn-cancel') as HTMLButtonElement,
         btnDiscard: document.getElementById('btn-discard') as HTMLButtonElement,
+        menuUndo: document.getElementById('menu-undo')!,
         modal: document.getElementById('modal')!,
         modalMsg: document.getElementById('modal-msg')!,
         alertModal: document.getElementById('alert-modal')!,
@@ -51,8 +51,8 @@ export class UIManager {
         if (isActionPhase && selected.length > 0) {
             // Check New Meld Validity
             if (selected.length >= 3) {
-                 const res = validateMeld(selected);
-                 if (res.valid) isMeldValid = true;
+                const res = validateMeld(selected);
+                if (res.valid) isMeldValid = true;
             }
             // Check Add-to-Meld Validity (if opened)
             if (hasOpened.human) {
@@ -67,44 +67,43 @@ export class UIManager {
 
         // --- Stock Pile ---
         this.ui.stock.className = `card card-back ${isDrawPhase ? 'interactive' : ''}`;
-        
+
         // --- Bottom Card ---
         if (bottomCard) {
-             this.ui.stock.style.position = 'relative'; 
-             this.ui.stock.style.zIndex = '10';
-             this.ui.stock.style.boxShadow = "2px 2px 0 #fff, 4px 4px 0 #000"; 
-             
-             let bEl = document.getElementById('bottom-card-display');
-             if(!bEl) {
-                 bEl = document.createElement('div');
-                 bEl.id = 'bottom-card-display';
-                 bEl.style.position = 'absolute';
-                 bEl.style.top = '5px'; 
-                 bEl.style.left = '40px'; 
-                 bEl.style.zIndex = '1'; 
-                 bEl.style.transform = 'rotate(10deg)';
-                 this.ui.stock.parentElement?.appendChild(bEl);
-             }
-             
-             bEl.className = `card ${bottomCard.getColor()}`;
-             bEl.innerHTML = this.renderCardInner(bottomCard);
-             bEl.title = "Jolly Hand (Click to take in Round 3+)";
-             
-             const canTakeJolly = isDrawPhase && round >= 3 && pHand.length === 12;
-             
-             if (canTakeJolly) {
-                 bEl.classList.add('interactive');
-                 bEl.onclick = () => (window as any).game.attemptJolly();
-                 bEl.style.boxShadow = "1px 1px 3px rgba(0,0,0,0.5)";
-             } else {
-                 bEl.classList.remove('interactive');
-                 bEl.onclick = null;
-                 bEl.style.boxShadow = "1px 1px 3px rgba(0,0,0,0.5)";
-             }
+            this.ui.stock.style.position = 'relative';
+            this.ui.stock.style.zIndex = '10';
+
+            let bEl = document.getElementById('bottom-card-display');
+            if (!bEl) {
+                bEl = document.createElement('div');
+                bEl.id = 'bottom-card-display';
+                bEl.style.position = 'absolute';
+                bEl.style.top = '15px';
+                bEl.style.left = '0';
+                bEl.style.zIndex = '1';
+                bEl.style.transform = 'translateY(35px)';
+                this.ui.stock.parentElement?.appendChild(bEl);
+            }
+
+            bEl.className = `card ${bottomCard.getColor()}`;
+            bEl.innerHTML = this.renderCardInner(bottomCard);
+            bEl.title = "Jolly Hand (Click to take in Round 3+)";
+
+            const canTakeJolly = isDrawPhase && round >= 3 && pHand.length === 12;
+
+            if (canTakeJolly) {
+                bEl.classList.add('interactive');
+                bEl.onclick = () => (window as any).game.attemptJolly();
+                bEl.style.boxShadow = "1px 1px 3px rgba(0,0,0,0.5)";
+            } else {
+                bEl.classList.remove('interactive');
+                bEl.onclick = null;
+                bEl.style.boxShadow = "1px 1px 3px rgba(0,0,0,0.5)";
+            }
 
         } else {
-             const bEl = document.getElementById('bottom-card-display');
-             if(bEl) bEl.remove();
+            const bEl = document.getElementById('bottom-card-display');
+            if (bEl) bEl.remove();
         }
 
         // --- Discard Pile ---
@@ -127,9 +126,9 @@ export class UIManager {
             const el = document.createElement('div');
             const handInteractive = isMyTurn ? 'interactive' : '';
             el.className = `card ${c.getColor()} ${c.selected ? 'selected' : ''} ${handInteractive}`;
-            el.dataset.id = c.id.toString(); 
+            el.dataset.id = c.id.toString();
             el.innerHTML = this.renderCardInner(c);
-            
+
             if (isMyTurn) {
                 // Drag Events
                 el.draggable = true;
@@ -145,7 +144,7 @@ export class UIManager {
 
             this.ui.pHand.appendChild(el);
         });
-        
+
         const oldBtn = document.getElementById('btn-jolly');
         if (oldBtn) oldBtn.remove();
 
@@ -153,7 +152,7 @@ export class UIManager {
         this.ui.cHand.innerHTML = '';
         cHand.forEach(() => {
             const el = document.createElement('div');
-            el.className = `card card-back`; 
+            el.className = `card card-back`;
             this.ui.cHand.appendChild(el);
         });
 
@@ -172,7 +171,7 @@ export class UIManager {
                 grp.style.cursor = 'default';
                 grp.onclick = null;
             }
-            
+
             meld.forEach(c => {
                 const el = document.createElement('div');
                 el.className = `card ${c.getColor()}`;
@@ -192,21 +191,20 @@ export class UIManager {
         }
 
         this.ui.btnDiscard.disabled = selected.length !== 1;
-        
+
         // --- Cancel / Undo Logic ---
         const canUndoDraw = isActionPhase && drawnFromDiscardId && turnMelds.length === 0;
         const canCancelMelds = turnMelds.length > 0 && !hasOpened.human;
 
         if (canUndoDraw) {
-            this.ui.btnCancel.style.display = 'block';
-            this.ui.btnCancel.innerText = 'Undo Draw';
-            this.ui.btnCancel.onclick = () => (window as any).game.undoDraw();
+            this.ui.menuUndo.classList.remove('disabled');
+            this.ui.menuUndo.onclick = () => (window as any).game.undoDraw();
         } else if (canCancelMelds) {
-            this.ui.btnCancel.style.display = 'block';
-            this.ui.btnCancel.innerText = 'Cancel Melds';
-            this.ui.btnCancel.onclick = () => (window as any).game.cancelMelds();
+            this.ui.menuUndo.classList.remove('disabled');
+            this.ui.menuUndo.onclick = () => (window as any).game.cancelMelds();
         } else {
-            this.ui.btnCancel.style.display = 'none';
+            this.ui.menuUndo.classList.add('disabled');
+            this.ui.menuUndo.onclick = null;
         }
     }
 
@@ -270,8 +268,8 @@ export class UIManager {
     }
 
     private handleCardClick(card: ICard) {
-        if (this.game.turn !== 'human') return; 
-        
+        if (this.game.turn !== 'human') return;
+
         // Toggle selection
         card.selected = !card.selected;
         this.sound.playClick();
@@ -290,7 +288,7 @@ export class UIManager {
     }
 
     private handleDragOver(e: DragEvent, el: HTMLElement) {
-        e.preventDefault(); 
+        e.preventDefault();
         if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
         el.classList.add('drag-over');
     }
@@ -303,14 +301,14 @@ export class UIManager {
     private handleDrop(e: DragEvent, toIdx: number) {
         e.preventDefault();
         e.stopPropagation();
-        
+
         const fromIdx = this.dragSourceIndex;
         if (fromIdx !== null && fromIdx !== toIdx) {
             this.game.reorderHand(fromIdx, toIdx);
             this.sound.playSnap();
         }
         this.dragSourceIndex = null;
-        this.render(); 
+        this.render();
     }
 
     private handleMeldClick(meldIdx: number) {
@@ -321,8 +319,8 @@ export class UIManager {
         // Capture Rects for animation
         const startRects: Record<number, DOMRect> = {};
         selected.forEach(c => {
-             const el = this.getCardElement(c.id);
-             if(el) startRects[c.id] = el.getBoundingClientRect();
+            const el = this.getCardElement(c.id);
+            if (el) startRects[c.id] = el.getBoundingClientRect();
         });
 
         if (selected.length === 1) {
@@ -359,12 +357,12 @@ export class UIManager {
 
     public animateTransition(targetEl: HTMLElement, startRect: DOMRect, endRect: DOMRect, onComplete: () => void) {
         targetEl.style.opacity = '0';
-        
+
         const flyer = document.createElement('div');
         flyer.className = targetEl.className;
         flyer.innerHTML = targetEl.innerHTML;
         flyer.classList.add('flying-card');
-        flyer.classList.remove('selected', 'dragging', 'drag-over'); 
+        flyer.classList.remove('selected', 'dragging', 'drag-over');
 
         // Initial Pos
         flyer.style.left = startRect.left + 'px';
@@ -397,7 +395,7 @@ export class UIManager {
 
         let count = 0;
         let completed = 0;
-        
+
         cards.forEach(c => {
             const startRect = startRects[c.id];
             // Find element in new meld by ID
@@ -406,34 +404,34 @@ export class UIManager {
                 count++;
                 this.animateTransition(targetEl, startRect, targetEl.getBoundingClientRect(), () => {
                     completed++;
-                    if(completed === count) onComplete();
+                    if (completed === count) onComplete();
                 });
             }
         });
-        
+
         if (count === 0) onComplete();
     }
-    
+
     public animateDiscard(card: ICard, startRect: DOMRect, onComplete: () => void) {
         this.sound.playSnap();
-        
+
         const flyer = document.createElement('div');
         flyer.className = `card ${card.getColor()} flying-card`;
         flyer.innerHTML = this.renderCardInner(card);
-        
+
         flyer.style.left = startRect.left + 'px';
         flyer.style.top = startRect.top + 'px';
         flyer.style.width = startRect.width + 'px';
         flyer.style.height = startRect.height + 'px';
-        
+
         document.body.appendChild(flyer);
         flyer.offsetHeight;
-        
+
         const endRect = this.ui.discard.getBoundingClientRect();
-        
+
         flyer.style.left = endRect.left + 'px';
         flyer.style.top = endRect.top + 'px';
-        
+
         setTimeout(() => {
             if (document.body.contains(flyer)) document.body.removeChild(flyer);
             onComplete();
