@@ -73,6 +73,12 @@ export class UIManager {
             this.ui.stock.style.position = 'relative';
             this.ui.stock.style.zIndex = '10';
 
+            if (isDrawPhase) {
+                this.ui.stock.style.cursor = 'pointer';
+            } else {
+                this.ui.stock.style.cursor = 'default';
+            }
+
             let bEl = document.getElementById('bottom-card-display');
             if (!bEl) {
                 bEl = document.createElement('div');
@@ -85,8 +91,18 @@ export class UIManager {
                 this.ui.stock.parentElement?.appendChild(bEl);
             }
 
-            bEl.className = `card ${bottomCard.getColor()}`;
-            bEl.innerHTML = this.renderCardInner(bottomCard);
+            if (bEl) {
+                bEl.innerHTML = this.renderCardInner(bottomCard);
+                bEl.className = `card ${bottomCard.getColor()}`;
+                bEl.onclick = () => (window as any).game.attemptJolly();
+
+                // Only show pointer if Round >= 3 (Jolly Hand allowed)
+                if (round >= 3 && isMyTurn && phase === 'draw') {
+                    bEl.style.cursor = 'pointer';
+                } else {
+                    bEl.style.cursor = 'default';
+                }
+            }
             bEl.title = "Jolly Hand (Click to take in Round 3+)";
 
             const canTakeJolly = isDrawPhase && round >= 3 && pHand.length === 12;
