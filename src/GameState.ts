@@ -100,6 +100,17 @@ export class GameState {
         return hasPureRun;
     }
 
+    public getTurnActiveCardIds(): number[] {
+        const ids: number[] = [];
+        // Additions to existing melds
+        this.turnAdditions.forEach(add => add.cards.forEach(c => ids.push(c.id)));
+        // New Melds created this turn
+        this.turnMelds.forEach(idx => {
+            if (this.melds[idx]) this.melds[idx].forEach(c => ids.push(c.id));
+        });
+        return ids;
+    }
+
     public drawCard(source: 'stock' | 'discard'): { success: boolean; card?: ICard; msg?: string } {
         if (this.phase !== 'draw') return { success: false };
 

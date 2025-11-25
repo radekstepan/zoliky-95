@@ -44,10 +44,28 @@ const App = {
     },
 
     undoDraw: () => {
+        // 1. Capture state before undo
+        const cardId = game.drawnFromDiscardId;
+        if (!cardId) return;
+
+        const cardEl = ui.getCardElement(cardId);
+        const startRect = cardEl ? cardEl.getBoundingClientRect() : null;
+
+        // 2. Perform Undo Logic
         const res = game.undoDraw();
+        
         if (res.success) {
+            // 3. Render (card moves to discard)
             ui.render();
-            ui.updateStatus("Draw undone. Select a pile.");
+            
+            // 4. Animate visual return
+            if (startRect) {
+                ui.animateUndoDraw(startRect, () => {
+                    ui.updateStatus("Draw undone. Select a pile.");
+                });
+            } else {
+                ui.updateStatus("Draw undone. Select a pile.");
+            }
         } else {
             ui.showAlert(res.msg || "Cannot undo");
         }
@@ -167,9 +185,20 @@ const App = {
     },
 
     cancelMelds: () => {
+        // 1. Capture positions of cards to be cancelled (from Table)
+        const cardIds = game.getTurnActiveCardIds();
+        const startRects = ui.captureCardPositions(cardIds);
+
+        // 2. Perform Logic
         game.cancelTurnMelds();
+        
+        // 3. Render (cards move to Hand)
         ui.render();
-        ui.updateStatus("Melds cancelled.");
+        
+        // 4. Animate Return
+        ui.animateReturnToHand(cardIds, startRects, () => {
+            ui.updateStatus("Melds cancelled.");
+        });
     },
 
     closeModal: () => {

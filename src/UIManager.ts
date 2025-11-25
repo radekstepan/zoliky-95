@@ -251,7 +251,17 @@ export class UIManager {
     }
 
     public getCardElement(id: number): HTMLElement | null {
-        return this.ui.pHand.querySelector(`[data-id="${id}"]`);
+        // Search globally for the card ID
+        return document.querySelector(`[data-id="${id}"]`);
+    }
+
+    public captureCardPositions(ids: number[]): Record<number, DOMRect> {
+        const rects: Record<number, DOMRect> = {};
+        ids.forEach(id => {
+            const el = this.getCardElement(id);
+            if (el) rects[id] = el.getBoundingClientRect();
+        });
+        return rects;
     }
 
     public getMeldElement(index: number): HTMLElement | null {
@@ -406,6 +416,82 @@ export class UIManager {
             targetEl.style.opacity = '1';
             onComplete();
         }, 500);
+    }
+
+    public animateReturnToHand(ids: number[], startRects: Record<number, DOMRect>, onComplete: () => void) {
+        this.sound.playSnap();
+        let count = 0;
+        let completed = 0;
+
+        ids.forEach(id => {
+            const startRect = startRects[id];
+            // Find element in hand (already rendered there)
+            const targetEl = this.ui.pHand.querySelector(`[data-id="${id}"]`) as HTMLElement;
+            if (startRect && targetEl) {
+                count++;
+                this.animateTransition(targetEl, startRect, targetEl.getBoundingClientRect(), () => {
+                    completed++;
+                    if (completed === count) onComplete();
+                });
+            }
+        });
+
+        if (count === 0) onComplete();
+    }
+
+    public animateUndoDraw(startRect: DOMRect, onComplete: () => void) {
+         this.sound.playSnap();
+         // The card is now in the discard pile logically and visually (after render).
+         // We need to find where it landed in the discard pile.
+         // Usually it's the last child or we can just use the discard pile container rect if top card.
+         
+         const discardEl = this.ui.discard; // The pile container
+         
+         // Visual trick: We want to fly FROM Hand TO Discard.
+         // But `animateTransition` expects a `targetEl` that exists at the end.
+         // The `targetEl` is the `ui.discard` element (showing the top card).
+         // But `ui.discard` is already showing it.
+         
+         // We can use the discard element as the target visually.
+         if (discardEl) {
+             // To prevent the "jump", we can momentarily hide the discard content? 
+             // Or better, just fly a copy over it.
+             
+             const flyer = document.createElement('div');
+             // We need to render the card face for the flyer
+             // We can fetch the card logic from game if needed, or just clone the hand element visual we had.
+             // But we only have rect. 
+             // Let's assume we can grab the HTML from the current discard pile since it IS the card now.
+             
+             flyer.className = discardEl.className;
+             flyer.classList.add('flying-card');
+             flyer.innerHTML = discardEl.innerHTML;
+             
+             // Start at Hand position
+             flyer.style.left = startRect.left + 'px';
+             flyer.style.top = startRect.top + 'px';
+             flyer.style.width = startRect.width + 'px';
+             flyer.style.height = startRect.height + 'px';
+             
+             document.body.appendChild(flyer);
+             flyer.offsetHeight;
+             
+             const endRect = discardEl.getBoundingClientRect();
+             
+             flyer.style.left = endRect.left + 'px';
+             flyer.style.top = endRect.top + 'px';
+             
+             // Hide the real discard temporarily to simulate it arriving?
+             // discardEl.style.opacity = '0';
+             
+             setTimeout(() => {
+                if (document.body.contains(flyer)) document.body.removeChild(flyer);
+                // discardEl.style.opacity = '1';
+                onComplete();
+             }, 500);
+         } else {
+             onComplete();
+         }
     }
 
     public animateToMeld(cards: ICard[], startRects: Record<number, DOMRect>, meldIndex: number, onComplete: () => void) {
