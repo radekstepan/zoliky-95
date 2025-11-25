@@ -124,14 +124,36 @@ class AiSolver {
 
         for (const r in rankGroups) {
             const group = rankGroups[r];
-            if (group.length >= 3) possible.push(group.slice(0, 3));
-            if (group.length === 4) possible.push(group);
-
-            if (group.length === 2 && jokers.length >= 1) {
-                possible.push([...group, jokers[0]]);
+            
+            // Generate valid combinations of 3 and 4
+            // Since validateMeld checks for unique suits, passing all combinations 
+            // and filtering later in optimizeMelds is robust.
+            
+            // Set of 3
+            if (group.length >= 3) {
+                const combos3 = this.getCombinations(group, 3);
+                possible.push(...combos3);
             }
-            if (group.length === 3 && jokers.length >= 1) {
-                possible.push([...group, jokers[0]]);
+            
+            // Set of 4
+            if (group.length >= 4) {
+                 const combos4 = this.getCombinations(group, 4);
+                 possible.push(...combos4);
+            }
+
+            // Sets with Jokers
+            if (jokers.length >= 1) {
+                // Pair + Joker
+                if (group.length >= 2) {
+                    const combos2 = this.getCombinations(group, 2);
+                    combos2.forEach(c => possible.push([...c, jokers[0]]));
+                }
+                
+                // Triple + Joker
+                if (group.length >= 3) {
+                    const combos3 = this.getCombinations(group, 3);
+                    combos3.forEach(c => possible.push([...c, jokers[0]]));
+                }
             }
         }
 
@@ -155,8 +177,17 @@ class AiSolver {
             if (jokers.length > 0) {
                  for (let i = 0; i < cards.length - 1; i++) {
                      const diff = cards[i+1].getOrder() - cards[i].getOrder();
+                     // Run with gap filled by Joker (e.g. 4, 6 -> 4, JK, 6)
                      if (diff === 2) {
                          const run = [cards[i], jokers[0], cards[i+1]];
+                         if (validateMeld(run).valid) possible.push(run);
+                     }
+                     // Run with Joker at end (e.g. 4, 5 -> 4, 5, JK)
+                     if (diff === 1) {
+                         // Try Joker at start or end?
+                         // Current validateMeld handles placement.
+                         // Let's generate [c1, c2, JK]
+                         const run = [cards[i], cards[i+1], jokers[0]];
                          if (validateMeld(run).valid) possible.push(run);
                      }
                  }
@@ -166,13 +197,28 @@ class AiSolver {
         return possible;
     }
 
+    private getCombinations(cards: ICard[], size: number): ICard[][] {
+        if (size === 0) return [[]];
+        if (cards.length === 0) return [];
+        
+        const [head, ...tail] = cards;
+        
+        const withHead = this.getCombinations(tail, size - 1).map(c => [head, ...c]);
+        const withoutHead = this.getCombinations(tail, size);
+        
+        return [...withHead, ...withoutHead];
+    }
+
     private optimizeMelds(allMelds: ICard[][]): ICard[][] {
         const scoredMelds = allMelds.map(m => {
             const res = validateMeld(m);
-            return { meld: m, points: res.points, isPure: res.isPure };
+            return { meld: m, points: res.points, isPure: res.isPure, valid: res.valid };
         });
 
-        scoredMelds.sort((a, b) => {
+        // CRITICAL FIX: Filter out invalid melds (e.g. sets with duplicate suits)
+        const validMelds = scoredMelds.filter(m => m.valid && m.points > 0);
+
+        validMelds.sort((a, b) => {
             if (!this.hasOpened && a.isPure && !b.isPure) return -1;
             if (!this.hasOpened && !a.isPure && b.isPure) return 1;
             return b.points - a.points;
@@ -181,7 +227,7 @@ class AiSolver {
         const chosen: ICard[][] = [];
         const usedIds = new Set<number>();
 
-        for (const item of scoredMelds) {
+        for (const item of validMelds) {
             const isOverlap = item.meld.some(c => usedIds.has(c.id));
             if (!isOverlap) {
                 chosen.push(item.meld);

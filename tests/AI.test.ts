@@ -59,4 +59,39 @@ describe('AI Logic', () => {
         expect(move.jokerSwaps.length).toBe(1);
         expect(move.jokerSwaps[0].handCardId).toBe(20);
     });
+
+    it('should NOT create a set with duplicate suits', () => {
+        // Hand has 2 Hearts and 1 Diamond of same rank.
+        // This is strictly invalid.
+        const hand = [
+            new Card('♥', 'K', 1),
+            new Card('♥', 'K', 2), // Duplicate suit
+            new Card('♦', 'K', 3),
+            new Card('♠', '2', 4)
+        ];
+
+        // Should find NO melds because K-K-K (H,H,D) is invalid
+        const move = calculateCpuMove(hand, true, []);
+        expect(move.meldsToPlay.length).toBe(0);
+    });
+
+    it('should find valid set if duplicate suits exist but distinct suits are available', () => {
+        // Hand has H, H, D, S (all K)
+        const hand = [
+            new Card('♥', 'K', 1),
+            new Card('♥', 'K', 2),
+            new Card('♦', 'K', 3),
+            new Card('♠', 'K', 4),
+            new Card('♣', '2', 5)
+        ];
+
+        // Should find [H, D, S] or similar valid combo
+        const move = calculateCpuMove(hand, true, []);
+        expect(move.meldsToPlay.length).toBeGreaterThan(0);
+        
+        const meld = move.meldsToPlay[0];
+        // Ensure unique suits
+        const suits = new Set(meld.map(c => c.suit));
+        expect(suits.size).toBe(meld.length);
+    });
 });
