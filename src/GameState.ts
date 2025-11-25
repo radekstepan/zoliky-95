@@ -1,5 +1,5 @@
 import { Deck } from "./core/Deck";
-import { ICard, TurnOwner, TurnPhase } from "./types";
+import { ICard, TurnOwner, TurnPhase, Difficulty } from "./types";
 import { sortHandLogic, validateMeld, organizeMeld } from "./core/rules";
 import { calculateCpuMove } from "./core/ai";
 
@@ -14,6 +14,7 @@ export class GameState {
     public turn: TurnOwner = 'human';
     public phase: TurnPhase = 'draw';
     public round: number = 1;
+    public difficulty: Difficulty = 'medium';
 
     public hasOpened = { human: false, cpu: false };
     public hasPureRun = { human: false, cpu: false };
@@ -65,6 +66,10 @@ export class GameState {
 
         this.turn = 'human';
         this.phase = 'action';
+    }
+
+    public setDifficulty(level: Difficulty) {
+        this.difficulty = level;
     }
 
     public resetTurnState() {
@@ -391,7 +396,8 @@ export class GameState {
         this.drawCard('stock');
 
         if (this.round >= 3) {
-            const move = calculateCpuMove(this.cHand, this.hasOpened.cpu, this.melds);
+            // Updated to pass difficulty
+            const move = calculateCpuMove(this.cHand, this.hasOpened.cpu, this.melds, this.difficulty);
 
             if (move.jokerSwaps && move.jokerSwaps.length > 0) {
                 const swap = move.jokerSwaps[0];

@@ -1,4 +1,4 @@
-import { ICard } from "../types";
+import { ICard, Difficulty } from "../types";
 import { validateMeld } from "./rules";
 import { SUITS, JOKER_SUIT } from "./Card";
 
@@ -14,9 +14,10 @@ export interface AiMove {
 export function calculateCpuMove(
     hand: ICard[], 
     hasOpened: boolean, 
-    tableMelds: ICard[][] = [] // Default to empty array for robustness
+    tableMelds: ICard[][] = [], 
+    difficulty: Difficulty = 'hard'
 ): AiMove {
-    const state = new AiSolver(hand, hasOpened, tableMelds);
+    const state = new AiSolver(hand, hasOpened, tableMelds, difficulty);
     return state.solve();
 }
 
@@ -24,16 +25,25 @@ class AiSolver {
     private hand: ICard[];
     private hasOpened: boolean;
     private tableMelds: ICard[][];
+    private difficulty: Difficulty;
 
-    constructor(hand: ICard[], hasOpened: boolean, tableMelds: ICard[][]) {
+    constructor(hand: ICard[], hasOpened: boolean, tableMelds: ICard[][], difficulty: Difficulty) {
         this.hand = [...hand]; 
         this.hasOpened = hasOpened;
         this.tableMelds = tableMelds || [];
+        this.difficulty = difficulty;
     }
 
     public solve(): AiMove {
         // 1. Look for Joker Swaps on the table
-        const swaps = this.findJokerSwaps();
+        let swaps = this.findJokerSwaps();
+
+        // DIFFICULTY: Easy AI misses swaps. Medium misses 50% of the time.
+        if (this.difficulty === 'easy') {
+            swaps = [];
+        } else if (this.difficulty === 'medium') {
+            if (Math.random() > 0.5) swaps = [];
+        }
         
         let workingHand = [...this.hand];
         
@@ -43,7 +53,7 @@ class AiSolver {
         // Find the non-overlapping subset of melds that maximizes score
         const bestMelds = this.optimizeMelds(allPotentialMelds);
 
-        // 3. Check Opening Rules
+        // 3. Check Opening Rules and Difficulty Limits
         let finalMeldsToPlay: ICard[][] = [];
         
         if (!this.hasOpened) {
@@ -57,7 +67,12 @@ class AiSolver {
                 finalMeldsToPlay = bestMelds;
             }
         } else {
-            finalMeldsToPlay = bestMelds;
+            // DIFFICULTY: Easy AI only plays one meld at a time
+            if (this.difficulty === 'easy' && bestMelds.length > 1) {
+                finalMeldsToPlay = [bestMelds[0]];
+            } else {
+                finalMeldsToPlay = bestMelds;
+            }
         }
 
         // 4. Determine Discard
@@ -125,10 +140,6 @@ class AiSolver {
         for (const r in rankGroups) {
             const group = rankGroups[r];
             
-            // Generate valid combinations of 3 and 4
-            // Since validateMeld checks for unique suits, passing all combinations 
-            // and filtering later in optimizeMelds is robust.
-            
             // Set of 3
             if (group.length >= 3) {
                 const combos3 = this.getCombinations(group, 3);
@@ -184,9 +195,6 @@ class AiSolver {
                      }
                      // Run with Joker at end (e.g. 4, 5 -> 4, 5, JK)
                      if (diff === 1) {
-                         // Try Joker at start or end?
-                         // Current validateMeld handles placement.
-                         // Let's generate [c1, c2, JK]
                          const run = [cards[i], cards[i+1], jokers[0]];
                          if (validateMeld(run).valid) possible.push(run);
                      }
@@ -215,7 +223,7 @@ class AiSolver {
             return { meld: m, points: res.points, isPure: res.isPure, valid: res.valid };
         });
 
-        // CRITICAL FIX: Filter out invalid melds (e.g. sets with duplicate suits)
+        // Filter out invalid melds (e.g. sets with duplicate suits)
         const validMelds = scoredMelds.filter(m => m.valid && m.points > 0);
 
         validMelds.sort((a, b) => {
@@ -246,6 +254,22 @@ class AiSolver {
         const nonJokers = hand.filter(c => !c.isJoker);
         if (nonJokers.length === 0) return hand[0];
 
+        // --- DIFFICULTY BASED DISCARD ---
+
+        // EASY: Random Discard
+        if (this.difficulty === 'easy') {
+            const randomIndex = Math.floor(Math.random() * nonJokers.length);
+            return nonJokers[randomIndex];
+        }
+
+        // MEDIUM: Greedy (Points Only)
+        // Discard highest value card to minimize penalty points
+        if (this.difficulty === 'medium') {
+            const sortedByValue = [...nonJokers].sort((a, b) => b.getValue() - a.getValue());
+            return sortedByValue[0];
+        }
+
+        // HARD: Synergy Based (Original Logic)
         const scores = nonJokers.map(card => {
             let synergy = 0;
             

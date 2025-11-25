@@ -1,5 +1,6 @@
 import { GameState } from "./GameState";
 import { UIManager } from "./UIManager";
+import { Difficulty } from "./types";
 import "./style.css";
 
 const game = new GameState();
@@ -23,10 +24,47 @@ const App = {
         game.initGame();
         ui.render();
         ui.updateStatus("Your turn. Draw a card.");
+        App.updateDifficultyUI();
     },
 
     showHelp: () => {
         ui.showAlert(HELP_HTML, "Help Topics", "❓", true);
+    },
+
+    toggleDifficultyMenu: () => {
+        const el = document.getElementById('difficulty-menu');
+        if (el) {
+            // Ensure UI is current before showing
+            App.updateDifficultyUI();
+            el.style.display = el.style.display === 'none' ? 'block' : 'none';
+        }
+    },
+
+    setDifficulty: (level: Difficulty) => {
+        game.setDifficulty(level);
+        ui.updateStatus(`Difficulty set to: ${level.toUpperCase()}`);
+        
+        const el = document.getElementById('difficulty-menu');
+        if (el) el.style.display = 'none';
+        
+        App.updateDifficultyUI();
+    },
+
+    updateDifficultyUI: () => {
+        const levels: {key: Difficulty, label: string}[] = [
+            { key: 'easy', label: 'Easy (Novice)' },
+            { key: 'medium', label: 'Medium (Casual)' },
+            { key: 'hard', label: 'Hard (Pro)' }
+        ];
+
+        levels.forEach(lvl => {
+            const el = document.getElementById(`menu-diff-${lvl.key}`);
+            if (el) {
+                // Add checkmark if selected, otherwise spacer to keep alignment
+                const prefix = (game.difficulty === lvl.key) ? "✓ " : "\u00A0\u00A0\u00A0"; // \u00A0 is &nbsp;
+                el.innerText = prefix + lvl.label;
+            }
+        });
     },
 
     humanDraw: (source: 'stock' | 'discard') => {
@@ -212,7 +250,6 @@ const App = {
 
 (window as any).game = App;
 (window as any).closeModal = App.closeModal;
-(window as any).closeAlert = App.closeAlert;
 (window as any).closeAlert = App.closeAlert;
 
 App.init();
