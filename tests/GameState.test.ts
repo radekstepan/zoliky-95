@@ -64,6 +64,64 @@ describe('GameState Rules Integration', () => {
             expect(dRes.success).toBe(true);
             expect(game.hasOpened.human).toBe(true);
         });
+
+        it('should allow adding to existing meld immediately if opening requirements met in same turn', () => {
+            // 1. Setup existing meld on table (e.g. from CPU)
+            const existingMeld = [new Card('♠', '5', 100), new Card('♠', '6', 101), new Card('♠', '7', 102)];
+            game.melds.push(existingMeld);
+
+            // 2. Setup player hand for Opening
+            // Pure Run: Q♥, K♥, A♥ (30 pts)
+            const openRun = [new Card('♥', 'Q', 1), new Card('♥', 'K', 2), new Card('♥', 'A', 3)];
+            // Set: 2♥, 2♦, 2♣ (6 pts) -> Total 36 pts
+            const openSet = [new Card('♥', '2', 4), new Card('♦', '2', 5), new Card('♣', '2', 6)];
+            
+            // Card to add to existing meld (8♠)
+            const cardToAdd = new Card('♠', '8', 7);
+            
+            game.pHand.push(...openRun, ...openSet, cardToAdd);
+
+            // 3. Play Opening Melds
+            game.attemptMeld(openRun);
+            game.attemptMeld(openSet);
+            
+            expect(game.hasOpened.human).toBe(false); // Not committed yet
+            expect(game.isOpeningConditionMet()).toBe(true); // But condition met
+
+            // 4. Attempt to add to existing meld (Index 0)
+            const res = game.addToExistingMeld(0, [cardToAdd]);
+            expect(res.success).toBe(true);
+            
+            // Verify card added
+            expect(game.melds[0].length).toBe(4);
+            expect(game.melds[0][3].rank).toBe('8');
+        });
+
+        it('should revert additions if turn is cancelled', () => {
+             // 1. Setup existing meld
+             const existingMeld = [new Card('♠', '5', 100), new Card('♠', '6', 101), new Card('♠', '7', 102)];
+             game.melds.push(existingMeld);
+ 
+             // 2. Meet opening requirements
+             const openRun = [new Card('♥', 'Q', 1), new Card('♥', 'K', 2), new Card('♥', 'A', 3)];
+             const openSet = [new Card('♥', '2', 4), new Card('♦', '2', 5), new Card('♣', '2', 6)];
+             const cardToAdd = new Card('♠', '8', 7);
+             game.pHand.push(...openRun, ...openSet, cardToAdd);
+ 
+             game.attemptMeld(openRun);
+             game.attemptMeld(openSet);
+             game.addToExistingMeld(0, [cardToAdd]);
+ 
+             expect(game.melds[0].length).toBe(4);
+ 
+             // 3. Cancel
+             game.cancelTurnMelds();
+ 
+             // 4. Verify revert
+             expect(game.melds[0].length).toBe(3); // Addition removed
+             expect(game.melds.length).toBe(1); // Opening melds removed
+             expect(game.pHand.some(c => c.id === 7)).toBe(true); // Card back in hand
+        });
     });
 
     describe('Joker Logic', () => {

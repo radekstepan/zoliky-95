@@ -20,6 +20,8 @@ export class GameState {
 
     public turnMelds: number[] = [];
     public turnPoints: number = 0;
+    // Track additions to existing melds for cancellation
+    public turnAdditions: { meldIndex: number, cards: ICard[] }[] = [];
 
     public drawnFromDiscardId: number | null = null;
     public discardCardUsed: boolean = false;
@@ -68,6 +70,7 @@ export class GameState {
     public resetTurnState() {
         this.turnMelds = [];
         this.turnPoints = 0;
+        this.turnAdditions = [];
         this.drawnFromDiscardId = null;
         this.discardCardUsed = false;
         this.swappedJokerIds = [];
@@ -79,6 +82,22 @@ export class GameState {
         if (fromIndex < 0 || fromIndex >= this.pHand.length || toIndex < 0 || toIndex >= this.pHand.length) return;
         const [card] = this.pHand.splice(fromIndex, 1);
         this.pHand.splice(toIndex, 0, card);
+    }
+
+    public isOpeningConditionMet(): boolean {
+        // Already opened
+        if (this.hasOpened.human) return true;
+        
+        // Pending open check
+        if (this.turnPoints < 36) return false;
+
+        const hasPureRun = this.turnMelds.some(idx => {
+            if (idx >= this.melds.length) return false;
+            const res = validateMeld(this.melds[idx]);
+            return res.type === 'run' && res.isPure;
+        });
+
+        return hasPureRun;
     }
 
     public drawCard(source: 'stock' | 'discard'): { success: boolean; card?: ICard; msg?: string } {
@@ -125,6 +144,7 @@ export class GameState {
         if (this.phase !== 'action') return { success: false, msg: "Not in action phase." };
         if (!this.drawnFromDiscardId) return { success: false, msg: "Did not draw from discard." };
         if (this.turnMelds.length > 0) return { success: false, msg: "Cannot undo after melding." };
+        if (this.turnAdditions.length > 0) return { success: false, msg: "Cannot undo after adding to melds." };
         if (this.swappedJokerIds.length > 0) return { success: false, msg: "Cannot undo after swapping Jokers." };
 
         const cardIdx = this.pHand.findIndex(c => c.id === this.drawnFromDiscardId);
@@ -245,6 +265,25 @@ export class GameState {
     }
 
     public cancelTurnMelds() {
+        // 1. Revert additions to existing melds
+        for (let i = this.turnAdditions.length - 1; i >= 0; i--) {
+            const { meldIndex, cards } = this.turnAdditions[i];
+            const cardIds = cards.map(c => c.id);
+
+            // Remove cards from meld
+            if (this.melds[meldIndex]) {
+                const meld = this.melds[meldIndex].filter(c => !cardIds.includes(c.id));
+                // Re-organize to ensure internal consistency (joker reps)
+                this.melds[meldIndex] = organizeMeld(meld);
+            }
+
+            // Return to hand
+            cards.forEach(c => c.representation = undefined);
+            this.pHand.push(...cards);
+        }
+        this.turnAdditions = [];
+
+        // 2. Revert new melds
         for (let i = this.turnMelds.length - 1; i >= 0; i--) {
             const idx = this.turnMelds[i];
             const cards = this.melds[idx];
@@ -278,6 +317,7 @@ export class GameState {
 
             this.hasOpened.human = true;
             this.turnMelds = [];
+            this.turnAdditions = []; // Commit additions
         }
 
         if (this.drawnFromDiscardId && !this.discardCardUsed) {
@@ -309,7 +349,9 @@ export class GameState {
     }
 
     public addToExistingMeld(meldIndex: number, selectedCards: ICard[]): { success: boolean; msg?: string; winner?: string } {
-        if (!this.hasOpened.human) return { success: false, msg: "Must open before adding to melds." };
+        if (!this.isOpeningConditionMet()) {
+            return { success: false, msg: "Must open (36pts + Pure Run) before adding to melds." };
+        }
 
         const targetMeld = [...this.melds[meldIndex]];
         const candidates = [...targetMeld, ...selectedCards];
@@ -320,6 +362,9 @@ export class GameState {
         if (!res.valid) return { success: false, msg: "Cannot add cards to this meld." };
 
         this.checkRequirementUsage(selectedCards);
+
+        // Track addition for potential cancellation
+        this.turnAdditions.push({ meldIndex, cards: [...selectedCards] });
 
         this.melds[meldIndex] = organized;
         const ids = selectedCards.map(c => c.id);

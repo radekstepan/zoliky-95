@@ -35,7 +35,7 @@ export class UIManager {
     }
 
     public render() {
-        const { round, turnPoints, discardPile, pHand, cHand, melds, turnMelds, hasOpened, turn, bottomCard, phase, drawnFromDiscardId } = this.game;
+        const { round, turnPoints, discardPile, pHand, cHand, melds, turnMelds, turnAdditions, turn, bottomCard, phase, drawnFromDiscardId } = this.game;
 
         this.ui.score.innerText = `Rd: ${round} | Pts: ${turnPoints}`;
 
@@ -54,8 +54,8 @@ export class UIManager {
                 const res = validateMeld(selected);
                 if (res.valid) isMeldValid = true;
             }
-            // Check Add-to-Meld Validity (if opened)
-            if (hasOpened.human) {
+            // Check Add-to-Meld Validity (if opened OR conditions met)
+            if (this.game.isOpeningConditionMet()) {
                 melds.forEach((m, i) => {
                     const organized = organizeMeld([...m, ...selected]);
                     if (validateMeld(organized).valid) {
@@ -176,7 +176,7 @@ export class UIManager {
         this.ui.table.innerHTML = '';
         melds.forEach((meld, idx) => {
             const grp = document.createElement('div');
-            const isPending = turnMelds.includes(idx) && !hasOpened.human && turn === 'human';
+            const isPending = turnMelds.includes(idx) && !this.game.hasOpened.human && turn === 'human';
             const isValidTarget = validTargets.includes(idx);
 
             grp.className = `meld-group ${isPending ? 'pending' : ''} ${isValidTarget ? 'valid-target' : ''}`;
@@ -209,8 +209,8 @@ export class UIManager {
         this.ui.btnDiscard.disabled = selected.length !== 1;
 
         // --- Cancel / Undo Logic ---
-        const canUndoDraw = isActionPhase && drawnFromDiscardId && turnMelds.length === 0;
-        const canCancelMelds = turnMelds.length > 0 && !hasOpened.human;
+        const canUndoDraw = isActionPhase && drawnFromDiscardId && turnMelds.length === 0 && turnAdditions.length === 0;
+        const canCancelMelds = (turnMelds.length > 0 || turnAdditions.length > 0) && !this.game.hasOpened.human;
 
         if (canUndoDraw) {
             this.ui.menuUndo.classList.remove('disabled');
