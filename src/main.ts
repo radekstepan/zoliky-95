@@ -6,15 +6,15 @@ const game = new GameState();
 const ui = new UIManager(game);
 
 const HELP_HTML = `
-<b>Jolly Rules:</b><br><br>
-1. <b>Opening:</b> You must have at least one Pure Run (Straight Flush without Jokers) and total meld points of 36+ to open.<br><br>
-2. <b>Melds:</b><br>
-   - Sets: 3 or 4 cards of same rank (different suits).<br>
-   - Runs: 3+ consecutive cards of same suit.<br><br>
-3. <b>Ace Values:</b><br>
-   - 1 point in A-2-3 run.<br>
-   - 10 points in Q-K-A run or Sets.<br><br>
-4. <b>Jolly Hand:</b> If you have 12 cards and can take the bottom card to meld EVERYTHING at once, you win immediately.<br><br>
+<b>Jolly Rules:</b><br/>
+1. <b>Opening:</b> You must have at least one Pure Run (Straight Flush without Jokers) and total meld points of 36+ to open.
+2. <b>Melds:</b>
+   - Sets: 3 or 4 cards of same rank (different suits).
+   - Runs: 3+ consecutive cards of same suit.
+3. <b>Ace Values:</b>
+   - 1 point in A-2-3 run.
+   - 10 points in Q-K-A run or Sets.
+4. <b>Jolly Hand:</b> If you have 12 cards and can take the bottom card to meld EVERYTHING at once, you win immediately.
 5. <b>Jokers:</b> Can replace any card. Swap them from table if you have the card they represent.
 `;
 
