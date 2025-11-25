@@ -177,10 +177,10 @@ export class UIManager {
 
             grp.className = `meld-group ${isPending ? 'pending' : ''} ${isValidTarget ? 'valid-target' : ''}`;
             if (isActionPhase) {
-                grp.style.cursor = 'pointer';
+                // grp.style.cursor = 'pointer';
                 grp.onclick = () => this.handleMeldClick(idx);
             } else {
-                grp.style.cursor = 'default';
+                // grp.style.cursor = 'default';
                 grp.onclick = null;
             }
 
