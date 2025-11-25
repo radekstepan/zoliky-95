@@ -289,7 +289,6 @@ body {
 }
 
 .meld-group {
-    background: rgba(255, 255, 255, 0.1);
     padding: 5px;
     border-radius: 4px;
     display: flex;
@@ -299,10 +298,6 @@ body {
     cursor: pointer;
 }
 
-.meld-group:hover {
-    background: rgba(255, 255, 255, 0.2);
-}
-
 /* Highlight valid target for drag/selection */
 .meld-group.valid-target {
     /* Cursor pointer is set via JS, no visual highlighting */
@@ -310,7 +305,6 @@ body {
 
 .meld-group .card {
     margin-right: -25px;
-    transform: scale(0.8);
     transform-origin: top left;
     margin-bottom: -20px;
 }
@@ -318,11 +312,6 @@ body {
 .meld-group .card:last-child {
     margin-right: 0;
     margin-right: -15px;
-}
-
-.meld-group .card:hover {
-    transform: scale(0.8) translateY(-5px);
-    z-index: 10;
 }
 
 /* Unconfirmed Melds */
