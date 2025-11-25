@@ -84,7 +84,7 @@ export class UIManager {
                 bEl = document.createElement('div');
                 bEl.id = 'bottom-card-display';
                 bEl.style.position = 'absolute';
-                bEl.style.top = '15px';
+                bEl.style.top = '18px';
                 bEl.style.left = '0';
                 bEl.style.zIndex = '1';
                 bEl.style.transform = 'translateY(35px)';
