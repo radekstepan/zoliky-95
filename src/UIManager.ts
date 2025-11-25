@@ -35,7 +35,7 @@ export class UIManager {
     }
 
     public render() {
-        const { round, turnPoints, discardPile, pHand, cHand, melds, turnMelds, turnAdditions, turn, bottomCard, phase, drawnFromDiscardId } = this.game;
+        const { round, turnPoints, discardPile, pHand, cHand, melds, turnMelds, turnAdditions, turn, bottomCard, phase, drawnFromDiscardId, hasOpened } = this.game;
 
         this.ui.score.innerText = `Rd: ${round} | Pts: ${turnPoints}`;
 
@@ -94,29 +94,25 @@ export class UIManager {
             if (bEl) {
                 bEl.innerHTML = this.renderCardInner(bottomCard);
                 bEl.className = `card ${bottomCard.getColor()}`;
-                bEl.onclick = () => (window as any).game.attemptJolly();
+                
+                // User requirement: Active only in turn 3+ AND before opened
+                const canTakeJolly = isDrawPhase && round >= 3 && pHand.length === 12 && !hasOpened.human;
 
-                // Only show pointer if Round >= 3 (Jolly Hand allowed)
-                if (round >= 3 && isMyTurn && phase === 'draw') {
+                if (canTakeJolly) {
                     bEl.style.cursor = 'pointer';
+                    bEl.classList.add('interactive');
+                    bEl.onclick = () => (window as any).game.attemptJolly();
+                    bEl.title = "Jolly Hand (Click to take)";
                 } else {
                     bEl.style.cursor = 'default';
+                    bEl.classList.remove('interactive');
+                    bEl.onclick = null;
+                    if (round < 3) bEl.title = "Jolly Hand (Available Round 3)";
+                    else if (hasOpened.human) bEl.title = "Cannot take Jolly Hand after opening";
+                    else if (pHand.length !== 12) bEl.title = "Need 12 cards to take Jolly Hand";
                 }
-            }
-            bEl.title = "Jolly Hand (Click to take in Round 3+)";
-
-            const canTakeJolly = isDrawPhase && round >= 3 && pHand.length === 12;
-
-            if (canTakeJolly) {
-                bEl.classList.add('interactive');
-                bEl.onclick = () => (window as any).game.attemptJolly();
-                bEl.style.boxShadow = "1px 1px 3px rgba(0,0,0,0.5)";
-            } else {
-                bEl.classList.remove('interactive');
-                bEl.onclick = null;
                 bEl.style.boxShadow = "1px 1px 3px rgba(0,0,0,0.5)";
             }
-
         } else {
             const bEl = document.getElementById('bottom-card-display');
             if (bEl) bEl.remove();

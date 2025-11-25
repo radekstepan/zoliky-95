@@ -252,6 +252,7 @@ export class GameState {
 
     public attemptJollyHand(): { success: boolean; msg?: string; winner?: string } {
         if (this.round < 3) return { success: false, msg: "Cannot take Jolly Hand until Round 3." };
+        if (this.hasOpened.human) return { success: false, msg: "Cannot take Jolly Hand after opening." };
         if (this.pHand.length !== 12) return { success: false, msg: "Need exactly 12 cards to take Jolly Hand." };
         if (!this.bottomCard) return { success: false, msg: "No bottom card available." };
         if (this.phase !== 'draw') return { success: false, msg: "Can only take Jolly Hand at start of turn." };
