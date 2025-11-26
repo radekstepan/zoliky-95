@@ -414,6 +414,14 @@ export class GameState {
         this.discardPile.push(card);
 
         if (this.pHand.length === 0) {
+            // Guard: Cannot win if you haven't opened (unless special Jolly turn)
+            if (!this.hasOpened.human && !this.isJollyTurn) {
+                // Restore card to hand because the move is invalid as a win
+                this.discardPile.pop();
+                this.pHand.push(card);
+                return { success: false, msg: "Cannot win without opening requirements (36pts + Pure Run)." };
+            }
+
             return { success: true, winner: 'Human', score: this.cHand.length * -1 };
         }
 

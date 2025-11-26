@@ -23,11 +23,22 @@ export function organizeMeld(cards: ICard[]): ICard[] {
     const validRes = validateMeld(cards);
     if (!validRes.valid || !validRes.type) return cards;
 
+    // Detect collision: If a real card exists that matches a Joker's representation,
+    // we MUST reset that Joker's representation so it can be recalculated (moved to end/start).
+    const nonJokers = cards.filter(c => !c.isJoker);
+    cards.filter(c => c.isJoker).forEach(j => {
+        if (j.representation) {
+            const collision = nonJokers.some(real => 
+                real.rank === j.representation!.rank && 
+                real.suit === j.representation!.suit
+            );
+            if (collision) j.representation = undefined;
+        }
+    });
+
     // DON'T clear existing representations - preserve Joker positions
     const jokers = cards.filter(c => c.isJoker);
-    const nonJokers = cards.filter(c => !c.isJoker);
-
-    // Separate Jokers into those with and without representations
+    // Note: jokers list needs to be re-evaluated for those with/without rep after collision check above
     const jokersWithRep = jokers.filter(j => j.representation !== undefined);
     const jokersWithoutRep = jokers.filter(j => j.representation === undefined);
 

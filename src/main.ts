@@ -24,7 +24,8 @@ const App = {
         const isDebug = new URLSearchParams(window.location.search).has('debug');
         game.initGame(isDebug);
         ui.render();
-        ui.updateStatus("Your turn. Draw a card.");
+        // Updated initial text to reflect Rule: Start by discarding (Hand size 13)
+        ui.updateStatus("Your turn. Discard a card to start.");
         App.updateDifficultyUI();
     },
 
