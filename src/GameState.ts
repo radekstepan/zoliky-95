@@ -34,7 +34,7 @@ export class GameState {
         this.deck = new Deck();
     }
 
-    public initGame() {
+    public initGame(debug: boolean = false) {
         this.deck.init();
         this.pHand = [];
         this.cHand = [];
@@ -45,9 +45,39 @@ export class GameState {
         this.round = 1;
         this.resetTurnState();
 
-        const cutJokers = this.deck.checkBottomThreeForJokers();
-        if (cutJokers.length > 0) {
-            this.pHand.push(...cutJokers);
+        if (debug) {
+            // Debug Hand Construction: Ready to win
+            // Pure Run (30pts): Q♥, K♥, A♥
+            this.pHand.push(this.deck.extractCard('Q', '♥')!);
+            this.pHand.push(this.deck.extractCard('K', '♥')!);
+            this.pHand.push(this.deck.extractCard('A', '♥')!);
+            
+            // Set (27pts): 9♦, 9♣, 9♠
+            this.pHand.push(this.deck.extractCard('9', '♦')!);
+            this.pHand.push(this.deck.extractCard('9', '♣')!);
+            this.pHand.push(this.deck.extractCard('9', '♠')!);
+            
+            // Run w/ Joker (9pts): 4♠, 5♠, Joker
+            this.pHand.push(this.deck.extractCard('4', '♠')!);
+            this.pHand.push(this.deck.extractCard('5', '♠')!);
+            this.pHand.push(this.deck.extractCard('Joker', 'JK')!);
+
+            // Set w/ Joker (30pts): J♦, J♣, Joker
+            this.pHand.push(this.deck.extractCard('J', '♦')!);
+            this.pHand.push(this.deck.extractCard('J', '♣')!);
+            this.pHand.push(this.deck.extractCard('Joker', 'JK')!);
+
+            // Discard: 2♣
+            this.pHand.push(this.deck.extractCard('2', '♣')!);
+
+            // Ensure no undefineds in case deck logic failed
+            this.pHand = this.pHand.filter(c => !!c);
+        } else {
+            // Standard Rule: Check bottom 3 for Jokers
+            const cutJokers = this.deck.checkBottomThreeForJokers();
+            if (cutJokers.length > 0) {
+                this.pHand.push(...cutJokers);
+            }
         }
 
         this.bottomCard = this.deck.removeBottom() || null;
@@ -61,7 +91,6 @@ export class GameState {
             if (c) this.cHand.push(c);
         }
 
-        // Initial sort for convenience
         sortHandLogic(this.pHand);
         sortHandLogic(this.cHand);
 
@@ -209,6 +238,9 @@ export class GameState {
     public attemptMeld(selectedCards: ICard[]): { success: boolean; msg?: string } {
         if (this.round < 3) return { success: false, msg: `Cannot meld until Round 3.` };
 
+        // Fix: Reset representation for cards coming from hand (e.g. reused Jokers)
+        selectedCards.forEach(c => c.representation = undefined);
+
         const result = validateMeld(selectedCards);
         if (!result.valid) return { success: false, msg: "Invalid Meld. Check suits/ranks/adjacency." };
 
@@ -260,6 +292,16 @@ export class GameState {
         const organized = organizeMeld(meld);
         const res = validateMeld(organized);
         if (!res.valid) return { success: false, msg: "Card does not fit in meld." };
+
+        // Rule: Can only swap from a Set if it results in the full 4-suit Set on the table.
+        // A Set meld allows max 4. Swapping one in just replaces the Joker.
+        // The rule implies you can't leave a "partial" set with a missing suit on the table when taking the Joker.
+        // Since Set max is 4, this means the table must have 4 cards (including the Joker) before swap.
+        if (res.type === 'set') {
+            if (organized.length < 4) {
+                 return { success: false, msg: "Can only swap Joker from a complete Set (4 cards)." };
+            }
+        }
 
         this.melds[meldIndex] = organized;
 
@@ -389,6 +431,9 @@ export class GameState {
             return { success: false, msg: "Must open (36pts + Pure Run) before adding to existing melds." };
         }
 
+        // Fix: Reset representation for cards coming from hand
+        selectedCards.forEach(c => c.representation = undefined);
+
         const targetMeld = [...this.melds[meldIndex]];
         // Calculate old points if we need to update turnPoints for a turnMeld
         const oldPoints = isCreatedThisTurn ? validateMeld(targetMeld).points : 0;
@@ -398,7 +443,11 @@ export class GameState {
         const organized = organizeMeld(candidates);
 
         const res = validateMeld(organized);
-        if (!res.valid) return { success: false, msg: "Cannot add cards to this meld." };
+        if (!res.valid) {
+             // CLEANUP: Reset representations if move failed!
+             selectedCards.forEach(c => c.representation = undefined);
+             return { success: false, msg: "Cannot add cards to this meld." };
+        }
 
         this.checkRequirementUsage(selectedCards);
 

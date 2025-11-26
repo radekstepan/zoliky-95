@@ -21,7 +21,8 @@ const HELP_HTML = `
 
 const App = {
     init: () => {
-        game.initGame();
+        const isDebug = new URLSearchParams(window.location.search).has('debug');
+        game.initGame(isDebug);
         ui.render();
         ui.updateStatus("Your turn. Draw a card.");
         App.updateDifficultyUI();
@@ -208,7 +209,7 @@ const App = {
                                     }
                                     ui.render();
                                     ui.updateStatus(`Round ${game.round}. Your turn.`);
-                                });
+                                }, !!cpuRes.winner);
                             } else {
                                 if (cpuRes.winner) {
                                     ui.showWinModal(`${cpuRes.winner} Wins! You lose ${cpuRes.score} pts.`);
@@ -225,7 +226,7 @@ const App = {
                                 }
                                 ui.render();
                                 ui.updateStatus(`Round ${game.round}. Your turn.`);
-                            });
+                            }, !!cpuRes.winner);
                         } else {
                             if (cpuRes.winner) {
                                 ui.showWinModal(`${cpuRes.winner} Wins! You lose ${cpuRes.score} pts.`);
@@ -238,7 +239,7 @@ const App = {
             };
 
             if (startRect) {
-                ui.animateDiscard(card, startRect, finishTurn);
+                ui.animateDiscard(card, startRect, finishTurn, !!res.winner);
             } else {
                 finishTurn();
             }

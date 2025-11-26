@@ -1,4 +1,5 @@
 import { Card, RANKS, SUITS, JOKER_SUIT } from "./Card";
+import { Rank, Suit } from "../types";
 
 export class Deck {
     private cards: Card[] = [];
@@ -34,6 +35,15 @@ export class Deck {
 
     public draw(): Card | undefined {
         return this.cards.pop();
+    }
+
+    // Used for debug hand construction
+    public extractCard(rank: Rank, suit: Suit): Card | undefined {
+        const idx = this.cards.findIndex(c => c.rank === rank && c.suit === suit);
+        if (idx !== -1) {
+            return this.cards.splice(idx, 1)[0];
+        }
+        return undefined;
     }
     
     // Rule: "Player checks bottom 3 cards. If he finds a Joker, he keeps it."

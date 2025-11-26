@@ -79,10 +79,6 @@ export function organizeMeld(cards: ICard[]): ICard[] {
         });
 
         // CRITICAL FIX: Ensure valid connectivity.
-        // If there are gaps between non-jokers that require filling, and free jokers are insufficient,
-        // we MUST cannibalize 'fixed' jokers (those with representations) to fill the gaps.
-        // This fixes the issue where a Joker with a 'stale' representation (e.g. Ace) fails to fill a gap (e.g. J-K).
-
         let gapsToFill = 0;
         const getRawIdx = (c: ICard) => {
              if (isAceLow && c.rank === 'A') return -1;
@@ -99,10 +95,7 @@ export function organizeMeld(cards: ICard[]): ICard[] {
         }
 
         if (gapsToFill > jokersWithoutRep.length) {
-            // Reset ALL jokers to ensure proper distribution
             jokers.forEach(j => j.representation = undefined);
-            
-            // Re-populate lists
             jokersWithRep.length = 0;
             jokersWithoutRep.length = 0;
             jokersWithoutRep.push(...jokers);
@@ -119,15 +112,12 @@ export function organizeMeld(cards: ICard[]): ICard[] {
             return RANKS[idx];
         };
 
-        // Build sequence including Jokers with existing representations
         const allCardsInSequence: Array<{ card: ICard, idx: number, isJoker: boolean }> = [];
 
-        // Add non-Jokers
         nonJokers.forEach(c => {
             allCardsInSequence.push({ card: c, idx: getRankIdx(c), isJoker: false });
         });
 
-        // Add Jokers with representations
         jokersWithRep.forEach(j => {
             if (j.representation) {
                 const idx = getRankIdx({ rank: j.representation.rank, getOrder: () => RANKS.indexOf(j.representation!.rank) } as ICard);
@@ -135,7 +125,6 @@ export function organizeMeld(cards: ICard[]): ICard[] {
             }
         });
 
-        // Sort by position
         allCardsInSequence.sort((a, b) => a.idx - b.idx);
 
         const finalSeq: ICard[] = [];
@@ -150,7 +139,6 @@ export function organizeMeld(cards: ICard[]): ICard[] {
                 const prevItem = allCardsInSequence[i - 1];
                 const diff = item.idx - prevItem.idx;
 
-                // Fill gaps with available Jokers
                 if (diff > 1) {
                     const needed = diff - 1;
                     for (let k = 0; k < needed; k++) {
@@ -172,9 +160,13 @@ export function organizeMeld(cards: ICard[]): ICard[] {
 
         while (availableJokers.length > 0) {
             const j = availableJokers.shift()!;
+            // currentEnd tracks the index of the last *original* item.
+            // finalSeq.length grows as we add jokers.
             const nextIdx = currentEnd + (finalSeq.length - allCardsInSequence.length);
 
-            if (nextIdx < RANKS.length) {
+            // FIX: Ensure we don't exceed RANKS length. nextIdx is the current last index.
+            // We want to add at nextIdx + 1. So nextIdx + 1 must be valid (< RANKS.length).
+            if (nextIdx + 1 < RANKS.length) {
                 j.representation = { rank: getRankFromIdx(nextIdx + 1), suit: suit };
                 finalSeq.push(j);
             } else {
@@ -205,6 +197,7 @@ export function validateMeld(cards: ICard[]): MeldResult {
         const firstRank = nonJokers[0].rank;
         const isSet = nonJokers.every(c => c.rank === firstRank);
         if (isSet) {
+            if (cards.length > 4) return { valid: false, points: 0 };
             const suits = nonJokers.map(c => c.suit);
             const uniqueSuits = new Set(suits);
             if (uniqueSuits.size !== suits.length) return { valid: false, points: 0 };
@@ -245,10 +238,6 @@ export function validateMeld(cards: ICard[]): MeldResult {
                     const diff = idxB - idxA;
 
                     if (diff < 1) return { valid: false, points: 0 };
-
-                    // Rule: Adjacent Jokers are invalid
-                    // A diff of > 2 implies 2 or more missing cards adjacent to each other
-                    // e.g., 4 ... 7 (diff=3, missing 5,6). Requires 2 adjacent Jokers.
                     if (diff > 2) return { valid: false, points: 0 };
 
                     const missingCount = diff - 1;
@@ -268,20 +257,8 @@ export function validateMeld(cards: ICard[]): MeldResult {
 
                 if (gaps > jokerCount) return { valid: false, points: 0 };
 
-                // Remaining Jokers go to ends. 
-                // If remaining > 1, they would be adjacent at one end?
-                // "2 Jokers can't be placed next to each other"
-                // If we have run: 4, 5. 2 Jokers left. 
-                // They would be: JK, 4, 5, JK (Valid)
-                // If 3 Jokers left? JK, 4, 5, JK, JK (Invalid).
-                // We need to distribute remaining jokers to Left and Right ends.
-                // If we add > 1 joker to ONE end, they are adjacent.
-                // So we can add max 1 to Left and max 1 to Right.
                 const remainingJokers = jokerCount - gaps;
-                if (remainingJokers > 2) return { valid: false, points: 0 }; // Impossible to separate
-
-                // Even if 2 remaining, if we can only fit them on ONE end (e.g. A, 2... can't go lower),
-                // then we have 2 on one end -> Invalid.
+                if (remainingJokers > 2) return { valid: false, points: 0 }; 
 
                 let rightIdx = getIdx(sorted[sorted.length - 1]);
                 let leftIdx = getIdx(sorted[0]);
@@ -290,12 +267,11 @@ export function validateMeld(cards: ICard[]): MeldResult {
                 let addedLeft = 0;
                 let pending = remainingJokers;
 
-                // Strategy: Fill where possible.
                 while (pending > 0) {
                     let placed = false;
                     // Try Right
                     if (addedRight === 0 && rightIdx < RANKS.length - 1) {
-                        rightIdx++; // simulating move
+                        rightIdx++; 
                         addedRight++;
                         const r = RANKS[rightIdx];
                         points += getRankValue(r, treatAceLow);
@@ -313,7 +289,6 @@ export function validateMeld(cards: ICard[]): MeldResult {
                     }
 
                     if (!placed && pending > 0) {
-                        // Cannot separate the jokers or cannot fit them
                         return { valid: false, points: 0 };
                     }
                 }

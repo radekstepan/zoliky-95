@@ -2,6 +2,7 @@ import { GameState } from "./GameState";
 import { ICard } from "./types";
 import { SoundManager } from "./core/SoundManager";
 import { validateMeld, organizeMeld } from "./core/rules";
+import { Card } from "./core/Card"; // Import Card class for cloning
 
 export class UIManager {
     private game: GameState;
@@ -38,6 +39,15 @@ export class UIManager {
         this.sound = new SoundManager();
     }
 
+    private cloneCard(c: ICard): Card {
+        const clone = new Card(c.suit, c.rank, c.id);
+        clone.selected = c.selected;
+        if (c.representation) {
+            clone.representation = { ...c.representation };
+        }
+        return clone;
+    }
+
     public render() {
         const { round, turnPoints, discardPile, pHand, cHand, melds, turnMelds, turnAdditions, turn, bottomCard, phase, drawnFromDiscardId, hasOpened } = this.game;
 
@@ -64,7 +74,9 @@ export class UIManager {
             melds.forEach((m, i) => {
                 const isTurnMeld = turnMelds.includes(i);
                 if (this.game.isOpeningConditionMet() || isTurnMeld) {
-                    const organized = organizeMeld([...m, ...selected]);
+                    // CLONE cards for speculative check to avoid mutating hand cards (Joker representation)
+                    const candidates = [...m, ...selected].map(c => this.cloneCard(c));
+                    const organized = organizeMeld(candidates);
                     if (validateMeld(organized).valid) {
                         validTargets.push(i);
                     }
@@ -531,27 +543,10 @@ export class UIManager {
     public animateUndoDraw(startRect: DOMRect, onComplete: () => void) {
          this.sound.playSnap();
          // The card is now in the discard pile logically and visually (after render).
-         // We need to find where it landed in the discard pile.
-         // Usually it's the last child or we can just use the discard pile container rect if top card.
+         const discardEl = this.ui.discard; 
          
-         const discardEl = this.ui.discard; // The pile container
-         
-         // Visual trick: We want to fly FROM Hand TO Discard.
-         // But `animateTransition` expects a `targetEl` that exists at the end.
-         // The `targetEl` is the `ui.discard` element (showing the top card).
-         // But `ui.discard` is already showing it.
-         
-         // We can use the discard element as the target visually.
          if (discardEl) {
-             // To prevent the "jump", we can momentarily hide the discard content? 
-             // Or better, just fly a copy over it.
-             
              const flyer = document.createElement('div');
-             // We need to render the card face for the flyer
-             // We can fetch the card logic from game if needed, or just clone the hand element visual we had.
-             // But we only have rect. 
-             // Let's assume we can grab the HTML from the current discard pile since it IS the card now.
-             
              flyer.className = discardEl.className;
              flyer.classList.add('flying-card');
              flyer.innerHTML = discardEl.innerHTML;
@@ -570,12 +565,8 @@ export class UIManager {
              flyer.style.left = endRect.left + 'px';
              flyer.style.top = endRect.top + 'px';
              
-             // Hide the real discard temporarily to simulate it arriving?
-             // discardEl.style.opacity = '0';
-             
              setTimeout(() => {
                 if (document.body.contains(flyer)) document.body.removeChild(flyer);
-                // discardEl.style.opacity = '1';
                 onComplete();
              }, 500);
          } else {
@@ -607,12 +598,19 @@ export class UIManager {
         if (count === 0) onComplete();
     }
 
-    public animateDiscard(card: ICard, startRect: DOMRect, onComplete: () => void) {
+    public animateDiscard(card: ICard, startRect: DOMRect, onComplete: () => void, isWinning: boolean = false) {
         this.sound.playSnap();
 
         const flyer = document.createElement('div');
-        flyer.className = `card ${card.getColor()} flying-card`;
-        flyer.innerHTML = this.renderCardInner(card);
+        
+        // If winning, animate face down (dramatic finish)
+        if (isWinning) {
+            flyer.className = `card card-back flying-card`;
+            flyer.innerHTML = '';
+        } else {
+            flyer.className = `card ${card.getColor()} flying-card`;
+            flyer.innerHTML = this.renderCardInner(card);
+        }
 
         flyer.style.left = startRect.left + 'px';
         flyer.style.top = startRect.top + 'px';
@@ -622,18 +620,39 @@ export class UIManager {
         document.body.appendChild(flyer);
         flyer.offsetHeight;
 
-        const endRect = this.ui.discard.getBoundingClientRect();
+        let endRect: DOMRect;
+        
+        // Determine destination rect
+        // If winning, try to target the offset winning-card element specifically
+        if (isWinning) {
+            const winEl = this.ui.discard.querySelector('.winning-discard');
+            if (winEl) {
+                endRect = winEl.getBoundingClientRect();
+                (winEl as HTMLElement).style.opacity = '0'; // Hide destination temporarily
+            } else {
+                endRect = this.ui.discard.getBoundingClientRect();
+            }
+        } else {
+            endRect = this.ui.discard.getBoundingClientRect();
+        }
 
         flyer.style.left = endRect.left + 'px';
         flyer.style.top = endRect.top + 'px';
 
         setTimeout(() => {
             if (document.body.contains(flyer)) document.body.removeChild(flyer);
+            
+            // Restore visibility of winning card if we hid it
+            if (isWinning) {
+                const winEl = this.ui.discard.querySelector('.winning-discard');
+                if (winEl) (winEl as HTMLElement).style.opacity = '1';
+            }
+            
             onComplete();
         }, 500);
     }
 
-    public animateCpuDiscard(card: ICard, onComplete: () => void) {
+    public animateCpuDiscard(card: ICard, onComplete: () => void, isWinning: boolean = false) {
         this.sound.playSnap();
 
         // Get the position of the last CPU hand card (rightmost)
@@ -642,8 +661,14 @@ export class UIManager {
         const startRect = lastCard ? lastCard.getBoundingClientRect() : this.ui.cHand.getBoundingClientRect();
 
         const flyer = document.createElement('div');
-        flyer.className = `card ${card.getColor()} flying-card`;
-        flyer.innerHTML = this.renderCardInner(card);
+        
+        if (isWinning) {
+            flyer.className = `card card-back flying-card`;
+            flyer.innerHTML = '';
+        } else {
+            flyer.className = `card ${card.getColor()} flying-card`;
+            flyer.innerHTML = this.renderCardInner(card);
+        }
 
         flyer.style.left = startRect.left + 'px';
         flyer.style.top = startRect.top + 'px';
@@ -653,13 +678,29 @@ export class UIManager {
         document.body.appendChild(flyer);
         flyer.offsetHeight;
 
-        const endRect = this.ui.discard.getBoundingClientRect();
+        let endRect: DOMRect;
+        
+        if (isWinning) {
+            const winEl = this.ui.discard.querySelector('.winning-discard');
+            if (winEl) {
+                endRect = winEl.getBoundingClientRect();
+                (winEl as HTMLElement).style.opacity = '0';
+            } else {
+                endRect = this.ui.discard.getBoundingClientRect();
+            }
+        } else {
+            endRect = this.ui.discard.getBoundingClientRect();
+        }
 
         flyer.style.left = endRect.left + 'px';
         flyer.style.top = endRect.top + 'px';
 
         setTimeout(() => {
             if (document.body.contains(flyer)) document.body.removeChild(flyer);
+             if (isWinning) {
+                const winEl = this.ui.discard.querySelector('.winning-discard');
+                if (winEl) (winEl as HTMLElement).style.opacity = '1';
+            }
             onComplete();
         }, 500);
     }
