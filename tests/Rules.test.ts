@@ -156,5 +156,20 @@ describe('Rules Unit Tests', () => {
             expect(meld[1].isJoker).toBe(true);
             expect(meld[2].rank).toBe('K');
         });
+
+        it('should fix Joker representation in J-K-Joker scenario if Joker has wrong suit', () => {
+             // Specific scenario requested by user:
+             // J, K (Spades) + Joker (showing A Hearts) -> Should become Q Spades
+             const j = new Card('♠', 'J', 10);
+             const k = new Card('♠', 'K', 11);
+             const joker = new Card('JK', 'Joker', 12);
+             joker.representation = { rank: 'A', suit: '♥' }; // Wrong suit/rank
+ 
+             const meld = organizeMeld([j, k, joker]);
+             
+             // Check correct representation
+             const jOut = meld.find(c => c.isJoker)!;
+             expect(jOut.representation).toEqual({ rank: 'Q', suit: '♠' });
+        });
     });
 });

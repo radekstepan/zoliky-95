@@ -23,11 +23,15 @@ export class UIManager {
         alertModal: document.getElementById('alert-modal')!,
         alertTitle: document.getElementById('alert-title')!,
         alertMsg: document.getElementById('alert-msg')!,
-        alertIcon: document.getElementById('alert-icon')!
+        alertIcon: document.getElementById('alert-icon')!,
+        debugModal: document.getElementById('debug-modal')!
     };
 
     // Drag State
     private dragSourceIndex: number | null = null;
+    
+    // Debug State
+    public debugSwapCardId: number | null = null;
 
     constructor(game: GameState) {
         this.game = game;
@@ -43,6 +47,7 @@ export class UIManager {
         const isDrawPhase = isMyTurn && phase === 'draw';
         const isActionPhase = isMyTurn && phase === 'action';
         const selected = pHand.filter(c => c.selected);
+        const isDebug = new URLSearchParams(window.location.search).has('debug');
 
         // --- Valid Move Calculations ---
         let isMeldValid = false;
@@ -124,18 +129,41 @@ export class UIManager {
         if (discardPile.length > 0) {
             const top = discardPile[discardPile.length - 1];
 
-            // Check for winning discard condition: Player or CPU hand is empty.
-            // When game ends, the last card in discard pile is the winning discard.
+            // Check for winning discard condition
             const isHumanWin = pHand.length === 0 && turn === 'human'; 
             const isCpuWin = cHand.length === 0 && turn === 'cpu';
             const isWinningCard = isHumanWin || isCpuWin;
 
             if (isWinningCard) {
-                // Render face down and offset
-                this.ui.discard.innerHTML = "";
-                this.ui.discard.className = `card card-back winning-discard`;
+                // Winning State: Show previous card (if any) and overlay winner face down
+                let baseCardHtml = "";
+                let baseCardClass = "card";
+                
+                if (discardPile.length >= 2) {
+                    const prev = discardPile[discardPile.length - 2];
+                    baseCardHtml = this.renderCardInner(prev);
+                    baseCardClass = `card ${prev.getColor()}`;
+                } else {
+                    // Empty underneath
+                    baseCardClass = "card";
+                    this.ui.discard.style.opacity = "0.5";
+                }
+
+                this.ui.discard.innerHTML = baseCardHtml;
+                this.ui.discard.className = baseCardClass;
                 this.ui.discard.style.opacity = "1";
+
+                // Overlay the winning card
+                const winCard = document.createElement('div');
+                winCard.className = "card card-back winning-discard";
+                winCard.style.position = "absolute";
+                winCard.style.top = "0";
+                winCard.style.left = "0";
+                // Note: .winning-discard in CSS handles the transform offset
+                
+                this.ui.discard.appendChild(winCard);
             } else {
+                // Normal State
                 this.ui.discard.innerHTML = this.renderCardInner(top);
                 const canDrawDiscard = isDrawPhase && round >= 3;
                 const discardInteractive = canDrawDiscard ? 'interactive' : '';
@@ -164,8 +192,12 @@ export class UIManager {
                 el.ondragover = (e) => this.handleDragOver(e, el);
                 el.ondragleave = (e) => this.handleDragLeave(e, el);
                 el.ondrop = (e) => this.handleDrop(e, idx);
-                // Fixed: Remove unused parameter
-                el.onclick = () => {
+                
+                el.onclick = (e) => {
+                    if (isDebug && e.shiftKey) {
+                        this.handleDebugSwap(c);
+                        return;
+                    }
                     this.handleCardClick(c);
                 };
             }
@@ -238,6 +270,43 @@ export class UIManager {
             this.ui.menuUndo.classList.add('disabled');
             this.ui.menuUndo.onclick = null;
         }
+    }
+
+    private handleDebugSwap(card: ICard) {
+        this.debugSwapCardId = card.id;
+
+        // Update dropdowns to match current card if possible
+        const rankEl = document.getElementById('combo-rank');
+        const rankText = document.getElementById('combo-rank-text');
+        const suitEl = document.getElementById('combo-suit');
+        const suitText = document.getElementById('combo-suit-text');
+
+        if (rankEl && rankText) {
+            // Map 'J' to 'Jack' etc for display
+            const displayMap: Record<string, string> = { 'J': 'Jack', 'Q': 'Queen', 'K': 'King', 'A': 'Ace', 'Joker': 'Joker' };
+            const val = card.rank;
+            rankEl.dataset.value = val;
+            rankText.innerText = displayMap[val] || val;
+        }
+
+        if (suitEl && suitText) {
+            const suitMap: Record<string, string> = { '♥': 'Hearts (♥)', '♦': 'Diamonds (♦)', '♣': 'Clubs (♣)', '♠': 'Spades (♠)', 'JK': 'Joker (JK)' };
+            const val = card.suit;
+            suitEl.dataset.value = val;
+            suitText.innerText = suitMap[val] || val;
+        }
+
+        this.ui.debugModal.style.display = 'flex';
+    }
+
+    public closeDebugModal() {
+        this.ui.debugModal.style.display = 'none';
+        this.debugSwapCardId = null;
+        // Close dropdowns if open
+        const rList = document.getElementById('combo-rank-list');
+        const sList = document.getElementById('combo-suit-list');
+        if (rList) rList.style.display = 'none';
+        if (sList) sList.style.display = 'none';
     }
 
     public updateStatus(msg: string) {

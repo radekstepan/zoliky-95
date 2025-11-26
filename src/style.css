@@ -399,6 +399,69 @@ body {
     color: #800000;
 }
 
+/* Custom Combo Box (Dropdown) */
+.win-combo {
+    position: relative;
+    width: 100%;
+}
+
+.win-combo-trigger {
+    background-color: white;
+    border-top: 2px solid var(--win-dark);
+    border-left: 2px solid var(--win-dark);
+    border-right: 2px solid var(--win-light);
+    border-bottom: 2px solid var(--win-light);
+    padding: 2px 5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    height: 24px;
+    box-sizing: border-box;
+}
+
+.win-combo-trigger span {
+    pointer-events: none;
+}
+
+.win-combo-arrow {
+    background: var(--win-gray);
+    border-top: 2px solid var(--win-light);
+    border-left: 2px solid var(--win-light);
+    border-right: 2px solid var(--win-darker);
+    border-bottom: 2px solid var(--win-darker);
+    width: 16px;
+    height: 16px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 10px;
+}
+
+.win-combo-popup {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: 100%;
+    max-height: 150px;
+    overflow-y: auto;
+    z-index: 1000;
+    background: var(--win-gray); /* Match window bg */
+}
+
+/* Match scrollbar to window style roughly */
+.win-combo-popup::-webkit-scrollbar {
+    width: 12px;
+}
+.win-combo-popup::-webkit-scrollbar-track {
+    background: #e0e0e0;
+}
+.win-combo-popup::-webkit-scrollbar-thumb {
+    background: #c0c0c0;
+    border: 1px solid #404040;
+}
+
+
 .actions-bar {
     display: flex;
     gap: 10px;

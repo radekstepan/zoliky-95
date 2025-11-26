@@ -60,11 +60,58 @@ const App = {
         levels.forEach(lvl => {
             const el = document.getElementById(`menu-diff-${lvl.key}`);
             if (el) {
-                // Add checkmark if selected, otherwise spacer to keep alignment
-                const prefix = (game.difficulty === lvl.key) ? "✓ " : "\u00A0\u00A0\u00A0"; // \u00A0 is &nbsp;
+                const prefix = (game.difficulty === lvl.key) ? "✓ " : "\u00A0\u00A0\u00A0"; 
                 el.innerText = prefix + lvl.label;
             }
         });
+    },
+
+    // --- Dropdown Logic ---
+    toggleDropdown: (type: 'rank' | 'suit') => {
+        const list = document.getElementById(`combo-${type}-list`);
+        if (list) {
+            const isVisible = list.style.display === 'block';
+            // Hide all first
+            document.getElementById('combo-rank-list')!.style.display = 'none';
+            document.getElementById('combo-suit-list')!.style.display = 'none';
+            
+            if (!isVisible) list.style.display = 'block';
+        }
+    },
+
+    selectDropdownOption: (type: 'rank' | 'suit', value: string, text: string) => {
+        const container = document.getElementById(`combo-${type}`);
+        const display = document.getElementById(`combo-${type}-text`);
+        const list = document.getElementById(`combo-${type}-list`);
+        
+        if (container) container.dataset.value = value;
+        if (display) display.innerText = text;
+        if (list) list.style.display = 'none';
+    },
+
+    submitDebugSwap: () => {
+        const uiInstance = (window as any).game_ui as UIManager;
+        if (!uiInstance.debugSwapCardId) return;
+        
+        // Get values from custom dropdowns
+        const rankEl = document.getElementById('combo-rank');
+        const suitEl = document.getElementById('combo-suit');
+        
+        let rank = rankEl?.dataset.value || '2';
+        let suit = suitEl?.dataset.value || '♥';
+        
+        // Validate Joker logic
+        if (rank === 'Joker' && suit !== 'JK') suit = 'JK';
+        if (suit === 'JK' && rank !== 'Joker') rank = 'Joker';
+
+        game.debugReplaceCard(uiInstance.debugSwapCardId, rank as any, suit as any);
+        uiInstance.closeDebugModal();
+        uiInstance.render();
+    },
+
+    closeDebugModal: () => {
+        const uiInstance = (window as any).game_ui as UIManager;
+        uiInstance.closeDebugModal();
     },
 
     humanDraw: (source: 'stock' | 'discard') => {
@@ -82,21 +129,16 @@ const App = {
     },
 
     undoDraw: () => {
-        // 1. Capture state before undo
         const cardId = game.drawnFromDiscardId;
         if (!cardId) return;
 
         const cardEl = ui.getCardElement(cardId);
         const startRect = cardEl ? cardEl.getBoundingClientRect() : null;
 
-        // 2. Perform Undo Logic
         const res = game.undoDraw();
         
         if (res.success) {
-            // 3. Render (card moves to discard)
             ui.render();
-            
-            // 4. Animate visual return
             if (startRect) {
                 ui.animateUndoDraw(startRect, () => {
                     ui.updateStatus("Draw undone. Select a pile.");
@@ -111,7 +153,6 @@ const App = {
 
     humanMeld: () => {
         const selected = game.pHand.filter(c => c.selected);
-        // Capture Rects before Logic
         const startRects: Record<number, DOMRect> = {};
         selected.forEach(c => {
             const el = ui.getCardElement(c.id);
@@ -122,7 +163,6 @@ const App = {
 
         if (res.success) {
             ui.render();
-            // The new meld is the last one
             const newMeldIndex = game.melds.length - 1;
             ui.animateToMeld(selected, startRects, newMeldIndex, () => { });
 
@@ -159,10 +199,8 @@ const App = {
                 setTimeout(() => {
                     const cpuRes = game.processCpuTurn();
 
-                    // Animate CPU draw first
                     if (cpuRes.drawSource) {
                         ui.animateCpuDraw(cpuRes.drawSource, () => {
-                            // Then animate CPU discard if there was one
                             if (cpuRes.discardedCard) {
                                 ui.animateCpuDiscard(cpuRes.discardedCard, () => {
                                     if (cpuRes.winner) {
@@ -180,8 +218,7 @@ const App = {
                             }
                         });
                     } else {
-                        // Fallback if no drawSource (shouldn't happen)
-                        if (cpuRes.discardedCard) {
+                         if (cpuRes.discardedCard) {
                             ui.animateCpuDiscard(cpuRes.discardedCard, () => {
                                 if (cpuRes.winner) {
                                     ui.showWinModal(`${cpuRes.winner} Wins! You lose ${cpuRes.score} pts.`);
@@ -223,17 +260,13 @@ const App = {
     },
 
     cancelMelds: () => {
-        // 1. Capture positions of cards to be cancelled (from Table)
         const cardIds = game.getTurnActiveCardIds();
         const startRects = ui.captureCardPositions(cardIds);
 
-        // 2. Perform Logic
         game.cancelTurnMelds();
         
-        // 3. Render (cards move to Hand)
         ui.render();
         
-        // 4. Animate Return
         ui.animateReturnToHand(cardIds, startRects, () => {
             ui.updateStatus("Melds cancelled.");
         });
@@ -249,6 +282,7 @@ const App = {
 };
 
 (window as any).game = App;
+(window as any).game_ui = ui; // Expose UI to global for helper access if needed
 (window as any).closeModal = App.closeModal;
 (window as any).closeAlert = App.closeAlert;
 

@@ -101,6 +101,66 @@
     </div>
 </div>
 
+<!-- Debug Swap Modal -->
+<div id="debug-modal" class="modal-overlay">
+    <div class="modal-window" style="width: 250px;">
+        <div class="title-bar">
+            <span>Debug Swap</span>
+            <button onclick="window.game.closeDebugModal()">X</button>
+        </div>
+        <div class="modal-body" style="text-align: left; padding: 20px;">
+            
+            <div style="margin-bottom: 15px;">
+                <label>Rank:</label>
+                <div class="win-combo" id="combo-rank" data-value="2">
+                    <div class="win-combo-trigger" onclick="window.game.toggleDropdown('rank')">
+                        <span id="combo-rank-text">2</span>
+                        <div class="win-combo-arrow">▼</div>
+                    </div>
+                    <div id="combo-rank-list" class="window win-combo-popup" style="display:none;">
+                        <div class="menu-item" onclick="window.game.selectDropdownOption('rank', '2', '2')">2</div>
+                        <div class="menu-item" onclick="window.game.selectDropdownOption('rank', '3', '3')">3</div>
+                        <div class="menu-item" onclick="window.game.selectDropdownOption('rank', '4', '4')">4</div>
+                        <div class="menu-item" onclick="window.game.selectDropdownOption('rank', '5', '5')">5</div>
+                        <div class="menu-item" onclick="window.game.selectDropdownOption('rank', '6', '6')">6</div>
+                        <div class="menu-item" onclick="window.game.selectDropdownOption('rank', '7', '7')">7</div>
+                        <div class="menu-item" onclick="window.game.selectDropdownOption('rank', '8', '8')">8</div>
+                        <div class="menu-item" onclick="window.game.selectDropdownOption('rank', '9', '9')">9</div>
+                        <div class="menu-item" onclick="window.game.selectDropdownOption('rank', '10', '10')">10</div>
+                        <div class="menu-item" onclick="window.game.selectDropdownOption('rank', 'J', 'Jack')">Jack</div>
+                        <div class="menu-item" onclick="window.game.selectDropdownOption('rank', 'Q', 'Queen')">Queen</div>
+                        <div class="menu-item" onclick="window.game.selectDropdownOption('rank', 'K', 'King')">King</div>
+                        <div class="menu-item" onclick="window.game.selectDropdownOption('rank', 'A', 'Ace')">Ace</div>
+                        <div class="menu-item" onclick="window.game.selectDropdownOption('rank', 'Joker', 'Joker')">Joker</div>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <label>Suit:</label>
+                <div class="win-combo" id="combo-suit" data-value="♥">
+                    <div class="win-combo-trigger" onclick="window.game.toggleDropdown('suit')">
+                        <span id="combo-suit-text">Hearts (♥)</span>
+                        <div class="win-combo-arrow">▼</div>
+                    </div>
+                    <div id="combo-suit-list" class="window win-combo-popup" style="display:none;">
+                        <div class="menu-item" onclick="window.game.selectDropdownOption('suit', '♥', 'Hearts (♥)')">Hearts (♥)</div>
+                        <div class="menu-item" onclick="window.game.selectDropdownOption('suit', '♦', 'Diamonds (♦)')">Diamonds (♦)</div>
+                        <div class="menu-item" onclick="window.game.selectDropdownOption('suit', '♣', 'Clubs (♣)')">Clubs (♣)</div>
+                        <div class="menu-item" onclick="window.game.selectDropdownOption('suit', '♠', 'Spades (♠)')">Spades (♠)</div>
+                        <div class="menu-item" onclick="window.game.selectDropdownOption('suit', 'JK', 'Joker (JK)')">Joker (JK)</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+        <div class="modal-footer">
+            <button class="win-btn" onclick="window.game.submitDebugSwap()">Swap</button>
+            <button class="win-btn" onclick="window.game.closeDebugModal()">Cancel</button>
+        </div>
+    </div>
+</div>
+
 <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

@@ -1,7 +1,8 @@
 import { Deck } from "./core/Deck";
-import { ICard, TurnOwner, TurnPhase, Difficulty } from "./types";
+import { ICard, TurnOwner, TurnPhase, Difficulty, Rank, Suit } from "./types";
 import { sortHandLogic, validateMeld, organizeMeld } from "./core/rules";
 import { calculateCpuMove } from "./core/ai";
+import { Card } from "./core/Card";
 
 export class GameState {
     public deck: Deck;
@@ -87,6 +88,19 @@ export class GameState {
         if (fromIndex < 0 || fromIndex >= this.pHand.length || toIndex < 0 || toIndex >= this.pHand.length) return;
         const [card] = this.pHand.splice(fromIndex, 1);
         this.pHand.splice(toIndex, 0, card);
+    }
+
+    // DEBUG: Swap a card in hand with a new arbitrary card
+    public debugReplaceCard(cardId: number, rank: Rank, suit: Suit) {
+        const idx = this.pHand.findIndex(c => c.id === cardId);
+        if (idx !== -1) {
+            // Generate a high ID to avoid collision with deck cards (0-200)
+            const newId = 1000 + Math.floor(Math.random() * 100000);
+            const newCard = new Card(suit, rank, newId);
+            // Preserve selection state if convenient, or just reset
+            newCard.selected = this.pHand[idx].selected; 
+            this.pHand[idx] = newCard;
+        }
     }
 
     public isOpeningConditionMet(): boolean {
