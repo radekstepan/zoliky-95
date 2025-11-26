@@ -302,6 +302,15 @@ body {
     /* Cursor pointer is set via JS, no visual highlighting */
 }
 
+/* Interactive Meld Cursor */
+.meld-group.meld-interactive {
+    cursor: pointer;
+}
+
+.meld-group.meld-interactive .card {
+    cursor: pointer;
+}
+
 .meld-group .card {
     margin-right: -25px;
     transform-origin: top left;

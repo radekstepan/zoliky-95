@@ -54,15 +54,17 @@ export class UIManager {
                 const res = validateMeld(selected);
                 if (res.valid) isMeldValid = true;
             }
-            // Check Add-to-Meld Validity (if opened OR conditions met)
-            if (this.game.isOpeningConditionMet()) {
-                melds.forEach((m, i) => {
+            // Check Add-to-Meld Validity
+            // Allow if opened OR if the target meld was created this turn
+            melds.forEach((m, i) => {
+                const isTurnMeld = turnMelds.includes(i);
+                if (this.game.isOpeningConditionMet() || isTurnMeld) {
                     const organized = organizeMeld([...m, ...selected]);
                     if (validateMeld(organized).valid) {
                         validTargets.push(i);
                     }
-                });
-            }
+                }
+            });
         }
 
         // --- Stock Pile ---
@@ -174,13 +176,17 @@ export class UIManager {
             const grp = document.createElement('div');
             const isPending = turnMelds.includes(idx) && !this.game.hasOpened.human && turn === 'human';
             const isValidTarget = validTargets.includes(idx);
+            
+            const isTurnMeld = turnMelds.includes(idx);
+            // Determine if meld should show pointer cursor (card selected + (opened OR is turn meld))
+            const showPointer = isActionPhase && selected.length > 0 && (this.game.isOpeningConditionMet() || isTurnMeld);
+            const interactiveClass = showPointer ? 'meld-interactive' : '';
 
-            grp.className = `meld-group ${isPending ? 'pending' : ''} ${isValidTarget ? 'valid-target' : ''}`;
+            grp.className = `meld-group ${isPending ? 'pending' : ''} ${isValidTarget ? 'valid-target' : ''} ${interactiveClass}`;
+            
             if (isActionPhase) {
-                // grp.style.cursor = 'pointer';
                 grp.onclick = () => this.handleMeldClick(idx);
             } else {
-                // grp.style.cursor = 'default';
                 grp.onclick = null;
             }
 

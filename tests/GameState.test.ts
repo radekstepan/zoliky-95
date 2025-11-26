@@ -124,6 +124,44 @@ describe('GameState Rules Integration', () => {
         });
     });
 
+    describe('Incremental Melding', () => {
+        it('should allow adding to a turn-meld even before opening condition is met', () => {
+             // 10, J, Q (30pts) - Not enough
+             const run = [new Card('♥', '10', 1), new Card('♥', 'J', 2), new Card('♥', 'Q', 3)];
+             game.pHand.push(...run);
+             game.attemptMeld(run);
+             
+             expect(game.turnPoints).toBe(30);
+             expect(game.isOpeningConditionMet()).toBe(false);
+             
+             // Add K (10pts)
+             const king = new Card('♥', 'K', 4);
+             game.pHand.push(king);
+             
+             // Try to add to the meld (index 0)
+             const res = game.addToExistingMeld(0, [king]);
+             
+             expect(res.success).toBe(true);
+             expect(game.turnPoints).toBe(40);
+             expect(game.isOpeningConditionMet()).toBe(true);
+        });
+
+        it('should NOT allow adding to previous turn melds if not opened', () => {
+             // Setup existing meld
+             const existing = [new Card('♠', '5', 10), new Card('♠', '6', 11), new Card('♠', '7', 12)];
+             game.melds.push(existing);
+             
+             // Hand has 8S
+             const eight = new Card('♠', '8', 20);
+             game.pHand.push(eight);
+             
+             // Try add
+             const res = game.addToExistingMeld(0, [eight]);
+             expect(res.success).toBe(false);
+             expect(res.msg).toContain('Must open');
+        });
+    });
+
     describe('Joker Logic', () => {
         it('should require swapped Joker to be used', () => {
             game.hasOpened.human = true;

@@ -366,11 +366,17 @@ export class GameState {
     }
 
     public addToExistingMeld(meldIndex: number, selectedCards: ICard[]): { success: boolean; msg?: string; winner?: string } {
-        if (!this.isOpeningConditionMet()) {
-            return { success: false, msg: "Must open (36pts + Pure Run) before adding to melds." };
+        const isCreatedThisTurn = this.turnMelds.includes(meldIndex);
+
+        // Relaxed rule: If it's a meld created this turn, we can add to it even if opening limit not met yet.
+        if (!isCreatedThisTurn && !this.isOpeningConditionMet()) {
+            return { success: false, msg: "Must open (36pts + Pure Run) before adding to existing melds." };
         }
 
         const targetMeld = [...this.melds[meldIndex]];
+        // Calculate old points if we need to update turnPoints for a turnMeld
+        const oldPoints = isCreatedThisTurn ? validateMeld(targetMeld).points : 0;
+
         const candidates = [...targetMeld, ...selectedCards];
 
         const organized = organizeMeld(candidates);
@@ -380,10 +386,20 @@ export class GameState {
 
         this.checkRequirementUsage(selectedCards);
 
-        // Track addition for potential cancellation
-        this.turnAdditions.push({ meldIndex, cards: [...selectedCards] });
+        // If it's a turn meld, we don't need to track specific additions for cancellation
+        // because cancelTurnMelds removes the whole meld.
+        // If it's an existing meld, we DO need to track additions.
+        if (!isCreatedThisTurn) {
+            this.turnAdditions.push({ meldIndex, cards: [...selectedCards] });
+        }
 
         this.melds[meldIndex] = organized;
+        
+        // Update turn points if modifying a turn meld to ensure accurate opening calculations
+        if (isCreatedThisTurn) {
+            this.turnPoints = (this.turnPoints - oldPoints) + res.points;
+        }
+
         const ids = selectedCards.map(c => c.id);
         this.pHand = this.pHand.filter(c => !ids.includes(c.id));
 
