@@ -225,6 +225,12 @@ body {
     border: 2px solid white;
 }
 
+/* Special winning discard state: Offset to right and south */
+.card.winning-discard {
+    transform: translate(40px, 20px);
+    z-index: 5;
+}
+
 .card-top,
 .card-bottom {
     font-weight: bold;

@@ -123,11 +123,25 @@ export class UIManager {
         // --- Discard Pile ---
         if (discardPile.length > 0) {
             const top = discardPile[discardPile.length - 1];
-            this.ui.discard.innerHTML = this.renderCardInner(top);
-            const canDrawDiscard = isDrawPhase && round >= 3;
-            const discardInteractive = canDrawDiscard ? 'interactive' : '';
-            this.ui.discard.className = `card ${top.getColor()} ${discardInteractive}`;
-            this.ui.discard.style.opacity = "1";
+
+            // Check for winning discard condition: Player or CPU hand is empty.
+            // When game ends, the last card in discard pile is the winning discard.
+            const isHumanWin = pHand.length === 0 && turn === 'human'; 
+            const isCpuWin = cHand.length === 0 && turn === 'cpu';
+            const isWinningCard = isHumanWin || isCpuWin;
+
+            if (isWinningCard) {
+                // Render face down and offset
+                this.ui.discard.innerHTML = "";
+                this.ui.discard.className = `card card-back winning-discard`;
+                this.ui.discard.style.opacity = "1";
+            } else {
+                this.ui.discard.innerHTML = this.renderCardInner(top);
+                const canDrawDiscard = isDrawPhase && round >= 3;
+                const discardInteractive = canDrawDiscard ? 'interactive' : '';
+                this.ui.discard.className = `card ${top.getColor()} ${discardInteractive}`;
+                this.ui.discard.style.opacity = "1";
+            }
         } else {
             this.ui.discard.innerHTML = "";
             this.ui.discard.className = "card";

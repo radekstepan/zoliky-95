@@ -354,11 +354,13 @@ export class GameState {
         const card = this.pHand.splice(cardIdx, 1)[0];
         card.selected = false;
 
+        // Push to discard pile regardless of outcome to maintain state for UI
+        this.discardPile.push(card);
+
         if (this.pHand.length === 0) {
             return { success: true, winner: 'Human', score: this.cHand.length * -1 };
         }
 
-        this.discardPile.push(card);
         this.turn = 'cpu';
         this.phase = 'draw';
         this.resetTurnState();
@@ -439,8 +441,12 @@ export class GameState {
                 const d = move.discardCard;
                 if (this.cHand.some(c => c.id === d.id)) {
                     this.cHand = this.cHand.filter(c => c.id !== d.id);
-                    if (this.cHand.length === 0) return { winner: "CPU", score: this.pHand.length * -1, discardedCard: d, drawSource: 'stock' };
+                    
+                    // Push to discard pile before checking for win to ensure UI can render it
                     this.discardPile.push(d);
+
+                    if (this.cHand.length === 0) return { winner: "CPU", score: this.pHand.length * -1, discardedCard: d, drawSource: 'stock' };
+                    
                     this.round++;
                     this.turn = 'human';
                     this.phase = 'draw';
