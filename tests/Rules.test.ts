@@ -130,5 +130,31 @@ describe('Rules Unit Tests', () => {
             expect(jokerAfter.representation!.suit).toBe(originalSuit);
             expect(jokerAfter.representation!.rank).toBe('J');
         });
+
+        it('should force reset of Joker representation if gaps require it (The Dirty Joker Fix)', () => {
+            // Scenario: We have J♥, K♥. We want to meld them with a Joker.
+            // But the Joker is "dirty" - it thinks it is an Ace of Hearts from a previous calc.
+            
+            const jack = new Card('♥', 'J', 1);
+            const king = new Card('♥', 'K', 2);
+            
+            // "Dirty" Joker: Thinks it is an Ace
+            const joker = new Card('JK', 'Joker', 3);
+            joker.representation = { rank: 'A', suit: '♥' };
+
+            // When we meld these, the Joker MUST become a Queen to fill the gap.
+            // If we respected the existing 'A' representation, we would get J, K, A (with a gap between J and K).
+            
+            const meld = organizeMeld([jack, king, joker]);
+
+            // Verify the Joker is now a Queen
+            const j = meld.find(c => c.isJoker)!;
+            expect(j.representation).toEqual({ rank: 'Q', suit: '♥' });
+            
+            // Verify order
+            expect(meld[0].rank).toBe('J');
+            expect(meld[1].isJoker).toBe(true);
+            expect(meld[2].rank).toBe('K');
+        });
     });
 });

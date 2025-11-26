@@ -78,6 +78,36 @@ export function organizeMeld(cards: ICard[]): ICard[] {
             return oa - ob;
         });
 
+        // CRITICAL FIX: Ensure valid connectivity.
+        // If there are gaps between non-jokers that require filling, and free jokers are insufficient,
+        // we MUST cannibalize 'fixed' jokers (those with representations) to fill the gaps.
+        // This fixes the issue where a Joker with a 'stale' representation (e.g. Ace) fails to fill a gap (e.g. J-K).
+
+        let gapsToFill = 0;
+        const getRawIdx = (c: ICard) => {
+             if (isAceLow && c.rank === 'A') return -1;
+             return RANKS.indexOf(c.rank);
+        };
+        
+        for (let i = 0; i < nonJokers.length - 1; i++) {
+            const idxA = getRawIdx(nonJokers[i]);
+            const idxB = getRawIdx(nonJokers[i+1]);
+            const diff = idxB - idxA;
+            if (diff > 1) {
+                gapsToFill += (diff - 1);
+            }
+        }
+
+        if (gapsToFill > jokersWithoutRep.length) {
+            // Reset ALL jokers to ensure proper distribution
+            jokers.forEach(j => j.representation = undefined);
+            
+            // Re-populate lists
+            jokersWithRep.length = 0;
+            jokersWithoutRep.length = 0;
+            jokersWithoutRep.push(...jokers);
+        }
+
         const suit = nonJokers[0].suit;
 
         const getRankIdx = (c: ICard) => {
