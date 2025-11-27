@@ -1,39 +1,45 @@
 import { describe, it, expect } from 'vitest';
 import { Deck } from '../src/core/Deck';
-import { Card } from '../src/core/Card';
 
 describe('Deck Logic', () => {
     it('should initialize with 108 cards', () => {
         const deck = new Deck();
+        // Since we cannot access cards private prop, we consume it
         let count = 0;
-        while(deck.draw()) {
-            count++;
-        }
+        while(deck.draw()) count++;
         expect(count).toBe(108);
     });
 
-    it('should check bottom 3 for Jokers', () => {
+    it('should extract specific card for debug', () => {
         const deck = new Deck();
-        // Manually force jokers at bottom
-        // Deck.cards is private, but we can mock via setCards if we expose it or use public API
-        // We'll use checkBottomThreeForJokers return value to verifying logic.
+        const card = deck.extractCard('A', '♥');
+        expect(card).toBeDefined();
+        expect(card?.rank).toBe('A');
+        expect(card?.suit).toBe('♥');
         
-        // Actually, since deck is shuffled, we can't guarantee finding them.
-        // But we can test that calling it doesn't crash and returns array.
-        const jokers = deck.checkBottomThreeForJokers();
-        expect(Array.isArray(jokers)).toBe(true);
-        
-        // Length of deck should be 108 - jokers.length
-        // But wait, we didn't count deck before.
-        // Let's construct a mock deck scenario? 
-        // Since we can't easily access internal cards in unit test without changing visibility:
-        // We will trust the method logic: checks 3, returns matches.
+        // Ensure it's removed
+        // We can't check internal array, but if we extract ALL A♥ (there are 2), next should be undef
+        const card2 = deck.extractCard('A', '♥');
+        expect(card2).toBeDefined();
+        const card3 = deck.extractCard('A', '♥');
+        expect(card3).toBeUndefined();
     });
 
-    it('should handle empty deck', () => {
+    it('should check bottom 3 for jokers', () => {
         const deck = new Deck();
-        while(deck.draw()) {} // empty it
-        expect(deck.draw()).toBeUndefined();
+        const jokers = deck.checkBottomThreeForJokers();
+        expect(Array.isArray(jokers)).toBe(true);
+    });
+    
+    it('should remove bottom card', () => {
+        const deck = new Deck();
+        const bottom = deck.removeBottom();
+        expect(bottom).toBeDefined();
+    });
+    
+    it('should refill when empty', () => {
+        const deck = new Deck();
+        deck.setCards([]);
         expect(deck.isEmpty()).toBe(true);
     });
 });

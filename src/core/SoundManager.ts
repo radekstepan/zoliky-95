@@ -3,12 +3,21 @@ export class SoundManager {
     private enabled: boolean = true;
 
     constructor() {
-        try {
-            // @ts-ignore
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            this.ctx = new AudioContext();
-        } catch (e) {
-            console.warn("Web Audio API not supported");
+        if (typeof window !== 'undefined') {
+            try {
+                // @ts-ignore
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (AudioContext) {
+                    this.ctx = new AudioContext();
+                } else {
+                    this.enabled = false;
+                }
+            } catch (e) {
+                console.warn("Web Audio API not supported");
+                this.enabled = false;
+            }
+        } else {
+            // Node/Test environment
             this.enabled = false;
         }
     }
@@ -46,7 +55,6 @@ export class SoundManager {
         osc.connect(gain);
         gain.connect(this.ctx.destination);
         
-        // Swish sound approximation
         osc.type = 'sine';
         osc.frequency.setValueAtTime(400, this.ctx.currentTime);
         osc.frequency.linearRampToValueAtTime(800, this.ctx.currentTime + 0.1);
@@ -79,7 +87,6 @@ export class SoundManager {
     }
 
     public playWin() {
-        // Capture context locally to ensure type safety in callback
         const ctx = this.ctx;
         if (!this.enabled || !ctx) return;
         

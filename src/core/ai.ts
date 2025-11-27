@@ -220,15 +220,29 @@ class AiSolver {
     private optimizeMelds(allMelds: ICard[][]): ICard[][] {
         const scoredMelds = allMelds.map(m => {
             const res = validateMeld(m);
-            return { meld: m, points: res.points, isPure: res.isPure, valid: res.valid };
+            return { 
+                meld: m, 
+                points: res.points, 
+                isPure: res.isPure, 
+                valid: res.valid,
+                type: res.type 
+            };
         });
 
-        // Filter out invalid melds (e.g. sets with duplicate suits)
+        // Filter out invalid melds
         const validMelds = scoredMelds.filter(m => m.valid && m.points > 0);
 
         validMelds.sort((a, b) => {
-            if (!this.hasOpened && a.isPure && !b.isPure) return -1;
-            if (!this.hasOpened && !a.isPure && b.isPure) return 1;
+            if (!this.hasOpened) {
+                const aPureRun = a.isPure && a.type === 'run';
+                const bPureRun = b.isPure && b.type === 'run';
+                
+                // Strict priority for Pure Runs to satisfy opening condition
+                if (aPureRun && !bPureRun) return -1;
+                if (!aPureRun && bPureRun) return 1;
+            }
+            
+            // Standard fallback: prefer points
             return b.points - a.points;
         });
 
