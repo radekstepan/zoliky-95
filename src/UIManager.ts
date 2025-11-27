@@ -321,7 +321,7 @@ export class UIManager {
             // Player Card
             if (i < pCards.length) {
                 setTimeout(() => {
-                    this.sound.playDeal();
+                    this.sound.playDeal(i * 2);
                     const target = pCards[i];
                     const rect = target.getBoundingClientRect();
 
@@ -352,7 +352,7 @@ export class UIManager {
             // CPU Card
             if (i < cCards.length) {
                 setTimeout(() => {
-                    this.sound.playDeal();
+                    this.sound.playDeal(i * 2 + 1);
                     const target = cCards[i];
                     const rect = target.getBoundingClientRect();
 
