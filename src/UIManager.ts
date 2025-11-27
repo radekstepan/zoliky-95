@@ -33,6 +33,8 @@ export class UIManager {
     
     // Debug State
     public debugSwapCardId: number | null = null;
+    
+    // Confetti State: No interval needed for CSS animation approach
 
     constructor(game: GameState) {
         this.game = game;
@@ -329,10 +331,44 @@ export class UIManager {
         this.sound.playWin();
         this.ui.modalMsg.innerText = msg;
         this.ui.modal.style.display = 'flex';
+        this.startConfetti();
     }
 
     public closeWinModal() {
         this.ui.modal.style.display = 'none';
+        this.stopConfetti();
+    }
+
+    private startConfetti() {
+        const colors = [
+            '#ffffff', '#c0c0c0', '#808080', '#000000',
+            '#ff0000', '#800000', '#ffff00', '#800000',
+            '#00ff00', '#008000', '#00ffff', '#008080',
+            '#0000ff', '#000080', '#ff00ff', '#800080'
+        ];
+
+        // Create 100 confetti pieces
+        for (let i = 0; i < 100; i++) {
+            const confetti = document.createElement('div');
+            confetti.className = 'confetti';
+            
+            // Random properties
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            const left = Math.random() * 100; // vw
+            const duration = 2 + Math.random() * 3; // 2-5s
+            const delay = Math.random() * 2; // 0-2s delay
+            
+            confetti.style.backgroundColor = color;
+            confetti.style.left = `${left}vw`;
+            confetti.style.animation = `confetti-fall ${duration}s linear ${delay}s infinite`;
+            
+            document.body.appendChild(confetti);
+        }
+    }
+
+    private stopConfetti() {
+        const confettis = document.querySelectorAll('.confetti');
+        confettis.forEach(el => el.remove());
     }
 
     public showAlert(msg: string, title: string = 'Alert', icon: string = '⚠️', isHtml: boolean = false) {
