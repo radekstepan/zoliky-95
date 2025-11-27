@@ -224,9 +224,14 @@ export class UIManager {
 
         // --- CPU Hand ---
         this.ui.cHand.innerHTML = '';
-        cHand.forEach(() => {
+        cHand.forEach((c) => {
             const el = document.createElement('div');
-            el.className = `card card-back`;
+            if (isDebug) {
+                el.className = `card ${c.getColor()}`;
+                el.innerHTML = this.renderCardInner(c);
+            } else {
+                el.className = `card card-back`;
+            }
             this.ui.cHand.appendChild(el);
         });
 
@@ -352,7 +357,9 @@ export class UIManager {
                     const rect = target.getBoundingClientRect();
 
                     const flyer = document.createElement('div');
-                    flyer.className = 'card card-back flying-card';
+                    flyer.className = target.className;
+                    flyer.innerHTML = target.innerHTML;
+                    flyer.classList.add('flying-card');
                     flyer.style.transition = `all ${flyDuration}ms ease-out`;
 
                     this.setFlyerPos(flyer, stockRect);
@@ -865,7 +872,14 @@ export class UIManager {
         const flyer = document.createElement('div');
 
         if (source === 'stock') {
-            flyer.className = 'card card-back flying-card';
+            const isDebug = new URLSearchParams(window.location.search).has('debug');
+            const lastCardData = this.game.cHand[this.game.cHand.length - 1];
+            if (isDebug && lastCardData) {
+                flyer.className = `card ${lastCardData.getColor()} flying-card`;
+                flyer.innerHTML = this.renderCardInner(lastCardData);
+            } else {
+                flyer.className = 'card card-back flying-card';
+            }
         } else {
             const topDiscard = this.game.discardPile[this.game.discardPile.length - 1];
             if (topDiscard) {
