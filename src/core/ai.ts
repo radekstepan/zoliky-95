@@ -12,14 +12,211 @@ export interface AiMove {
  * Main AI Entry Point
  */
 export function calculateCpuMove(
-    hand: ICard[], 
-    hasOpened: boolean, 
-    tableMelds: ICard[][] = [], 
+    hand: ICard[],
+    hasOpened: boolean,
+    tableMelds: ICard[][] = [],
     difficulty: Difficulty = 'hard',
     opponentHandSize: number = 12 // Default to safe assumption
 ): AiMove {
     const state = new AiSolver(hand, hasOpened, tableMelds, difficulty, opponentHandSize);
     return state.solve();
+}
+
+/**
+ * Calculates the "Melding Distance" (number of cards left to meld).
+ * Lower is better.
+ */
+export function evaluateHandProgress(
+    hand: ICard[],
+    hasOpened: boolean,
+    tableMelds: ICard[][] = []
+): number {
+    const baseHand = cloneCards(hand);
+    const baseTable = cloneMelds(tableMelds);
+
+    const states = hasOpened
+        ? generateSwapStates(baseHand, baseTable)
+        : [{ hand: baseHand, table: baseTable }];
+
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    states.forEach(state => {
+        const solver = new AiSolver(state.hand, hasOpened, state.table, 'hard', 12);
+        const bestMelds = solver.getBestMelds();
+        const distance = evaluateStateDistance(state.hand, state.table, bestMelds, hasOpened);
+        if (distance < bestDistance) bestDistance = distance;
+    });
+
+    return bestDistance;
+}
+
+interface SwapState {
+    hand: ICard[];
+    table: ICard[][];
+}
+
+function evaluateStateDistance(hand: ICard[], table: ICard[][], bestMelds: ICard[][], hasOpened: boolean): number {
+    const playedIds = new Set(bestMelds.flat().map(c => c.id));
+
+    const remaining = hand.filter(c => !playedIds.has(c.id));
+
+    const score = bestMelds.reduce((sum: number, m: ICard[]) => sum + validateMeld(m).points, 0);
+    const hasPure = bestMelds.some((m: ICard[]) => {
+        const res = validateMeld(m);
+        return res.type === 'run' && res.isPure;
+    });
+    const canOpen = hasOpened || (score >= 36 && hasPure);
+
+    let distance: number;
+
+    if (canOpen) {
+        const remainingCount = minimizeRemainingAfterTable(remaining, table);
+        distance = remainingCount;
+        if (distance <= 1) {
+            distance = 0; // Can discard and win after laying off
+        }
+    } else {
+        distance = remaining.length + 2; // Penalty for not being able to open
+    }
+
+    return distance;
+}
+
+function minimizeRemainingAfterTable(hand: ICard[], table: ICard[][]): number {
+    if (hand.length === 0) return 0;
+    if (table.length === 0) return hand.length;
+
+    const memo = new Map<string, number>();
+
+    const dfs = (currentHand: ICard[], currentTable: ICard[][]): number => {
+        if (currentHand.length === 0) return 0;
+        const key = serializeState(currentHand, currentTable);
+        if (memo.has(key)) return memo.get(key)!;
+
+        let best = currentHand.length;
+
+        for (let hIdx = 0; hIdx < currentHand.length; hIdx++) {
+            for (let mIdx = 0; mIdx < currentTable.length; mIdx++) {
+                const added = attemptAddCardToMeld(currentHand[hIdx], currentTable[mIdx]);
+                if (!added) continue;
+
+                const nextHand = cloneCards([
+                    ...currentHand.slice(0, hIdx),
+                    ...currentHand.slice(hIdx + 1)
+                ]);
+
+                const nextTable = currentTable.map((meld, idx) =>
+                    idx === mIdx ? cloneCards(added) : cloneCards(meld)
+                );
+
+                best = Math.min(best, dfs(nextHand, nextTable));
+            }
+        }
+
+        memo.set(key, best);
+        return best;
+    };
+
+    return dfs(cloneCards(hand), cloneMelds(table));
+}
+
+function attemptAddCardToMeld(card: ICard, meld: ICard[]): ICard[] | null {
+    const candidate = [...meld.map(cloneCard), cloneCard(card)];
+    const organized = organizeMeld(candidate);
+    const res = validateMeld(organized);
+    return res.valid ? organized.map(cloneCard) : null;
+}
+
+function generateSwapStates(hand: ICard[], table: ICard[][]): SwapState[] {
+    const results: SwapState[] = [];
+    const seen = new Set<string>();
+
+    const dfs = (currentHand: ICard[], currentTable: ICard[][]) => {
+        const key = serializeState(currentHand, currentTable);
+        if (seen.has(key)) return;
+        seen.add(key);
+
+        results.push({ hand: cloneCards(currentHand), table: cloneMelds(currentTable) });
+
+        const swapOptions = findSetSwapOptions(currentHand, currentTable);
+        swapOptions.forEach(opt => {
+            const nextHand = cloneCards(currentHand);
+            const nextTable = cloneMelds(currentTable);
+
+            const handIdx = nextHand.findIndex(c => c.id === opt.handCardId);
+            if (handIdx === -1) return;
+
+            const replacementCard = nextHand.splice(handIdx, 1)[0];
+            const jokerCard = nextTable[opt.meldIndex][opt.jokerIndex];
+
+            nextTable[opt.meldIndex][opt.jokerIndex] = cloneCard(replacementCard);
+            nextHand.push(cloneCard(jokerCard));
+
+            dfs(nextHand, nextTable);
+        });
+    };
+
+    dfs(cloneCards(hand), cloneMelds(table));
+    return results;
+}
+
+interface SwapOption {
+    meldIndex: number;
+    jokerIndex: number;
+    handCardId: number;
+}
+
+function findSetSwapOptions(hand: ICard[], table: ICard[][]): SwapOption[] {
+    const options: SwapOption[] = [];
+
+    table.forEach((meld, meldIndex) => {
+        const jokerIndex = meld.findIndex(c => c.isJoker);
+        if (jokerIndex === -1) return;
+
+        const nonJokers = meld.filter(c => !c.isJoker);
+        if (nonJokers.length < 3) return; // Need 3 suits down already to allow swap
+
+        const rank = nonJokers[0].rank;
+        if (!nonJokers.every(c => c.rank === rank)) return;
+
+        const presentSuits = new Set(nonJokers.map(c => c.suit));
+        SUITS.forEach(suit => {
+            if (suit === JOKER_SUIT) return;
+            if (presentSuits.has(suit)) return;
+
+            const candidate = hand.find(c => c.rank === rank && c.suit === suit);
+            if (candidate) {
+                options.push({ meldIndex, jokerIndex, handCardId: candidate.id });
+            }
+        });
+    });
+
+    return options;
+}
+
+function cloneCards(cards: ICard[]): ICard[] {
+    return cards.map(cloneCard);
+}
+
+function cloneMelds(melds: ICard[][]): ICard[][] {
+    return melds.map(m => cloneCards(m));
+}
+
+function cloneCard(card: ICard): ICard {
+    const c = new Card(card.suit, card.rank, card.id);
+    c.selected = card.selected;
+    if (card.representation) {
+        c.representation = { ...card.representation };
+    }
+    return c;
+}
+
+function serializeState(hand: ICard[], table: ICard[][]): string {
+    const handKey = hand.map(c => c.id).sort((a, b) => a - b).join(',');
+    const tableKey = table
+        .map(m => m.map(c => c.id).sort((a, b) => a - b).join('-'))
+        .join('|');
+    return `${handKey}|${tableKey}`;
 }
 
 class AiSolver {
@@ -30,13 +227,13 @@ class AiSolver {
     private opponentHandSize: number;
 
     constructor(
-        hand: ICard[], 
-        hasOpened: boolean, 
-        tableMelds: ICard[][], 
+        hand: ICard[],
+        hasOpened: boolean,
+        tableMelds: ICard[][],
         difficulty: Difficulty,
         opponentHandSize: number
     ) {
-        this.hand = [...hand]; 
+        this.hand = [...hand];
         this.hasOpened = hasOpened;
         this.tableMelds = tableMelds || [];
         this.difficulty = difficulty;
@@ -53,18 +250,15 @@ class AiSolver {
         } else if (this.difficulty === 'medium') {
             if (Math.random() > 0.5) swaps = [];
         }
-        
+
         let workingHand = [...this.hand];
-        
+
         // 2. Find Best Meld Configuration
-        const allPotentialMelds = this.findAllPossibleMelds(workingHand);
-        
-        // Find the non-overlapping subset of melds that maximizes score
-        const bestMelds = this.optimizeMelds(allPotentialMelds);
+        const bestMelds = this.getBestMelds();
 
         // 3. Check Opening Rules and Difficulty Limits
         let finalMeldsToPlay: ICard[][] = [];
-        
+
         if (!this.hasOpened) {
             const score = bestMelds.reduce((sum, m) => sum + validateMeld(m).points, 0);
             const hasPure = bestMelds.some(m => {
@@ -87,7 +281,7 @@ class AiSolver {
         // 4. Determine Discard
         const playedIds = new Set(finalMeldsToPlay.flat().map(c => c.id));
         let remainingCards = workingHand.filter(c => !playedIds.has(c.id));
-        
+
         const discardCard = this.pickBestDiscard(remainingCards);
 
         return {
@@ -97,28 +291,33 @@ class AiSolver {
         };
     }
 
+    public getBestMelds(): ICard[][] {
+        const allPotentialMelds = this.findAllPossibleMelds(this.hand);
+        return this.optimizeMelds(allPotentialMelds);
+    }
+
     // --- Joker Swapping Logic ---
 
     private findJokerSwaps(): { meldIndex: number, handCardId: number }[] {
-        if (!this.hasOpened) return []; 
+        if (!this.hasOpened) return [];
 
         const swaps: { meldIndex: number, handCardId: number }[] = [];
-        
+
         this.tableMelds.forEach((meld, mIdx) => {
             const jokerIdx = meld.findIndex(c => c.isJoker);
             if (jokerIdx === -1) return;
 
             const nonJokers = meld.filter(c => !c.isJoker);
-            if (nonJokers.length < 2) return; 
+            if (nonJokers.length < 2) return;
 
             // Check Set
             if (nonJokers[0].rank === nonJokers[1].rank) {
                 // Rule: Set must become 4 suits to swap.
-                if (nonJokers.length < 3) return; 
-                
+                if (nonJokers.length < 3) return;
+
                 const presentSuits = nonJokers.map(c => c.suit);
                 const missingSuit = SUITS.find(s => s !== JOKER_SUIT && !presentSuits.includes(s));
-                
+
                 if (missingSuit) {
                     const candidate = this.hand.find(c => c.rank === nonJokers[0].rank && c.suit === missingSuit);
                     if (candidate) {
@@ -148,32 +347,34 @@ class AiSolver {
 
         for (const r in rankGroups) {
             const group = rankGroups[r];
-            
+
             // Set of 3
             if (group.length >= 3) {
                 const combos3 = this.getCombinations(group, 3);
                 possible.push(...combos3);
             }
-            
+
             // Set of 4
             if (group.length >= 4) {
-                 const combos4 = this.getCombinations(group, 4);
-                 possible.push(...combos4);
+                const combos4 = this.getCombinations(group, 4);
+                possible.push(...combos4);
             }
 
             // Sets with Jokers
             if (jokers.length >= 1) {
-                // Pair + Joker
-                if (group.length >= 2) {
-                    const combos2 = this.getCombinations(group, 2);
-                    combos2.forEach(c => possible.push([...c, jokers[0]]));
-                }
-                
-                // Triple + Joker
-                if (group.length >= 3) {
-                    const combos3 = this.getCombinations(group, 3);
-                    combos3.forEach(c => possible.push([...c, jokers[0]]));
-                }
+                jokers.forEach(joker => {
+                    // Pair + Joker
+                    if (group.length >= 2) {
+                        const combos2 = this.getCombinations(group, 2);
+                        combos2.forEach(c => possible.push([...c, joker]));
+                    }
+
+                    // Triple + Joker
+                    if (group.length >= 3) {
+                        const combos3 = this.getCombinations(group, 3);
+                        combos3.forEach(c => possible.push([...c, joker]));
+                    }
+                });
             }
         }
 
@@ -186,28 +387,35 @@ class AiSolver {
 
         for (const s in suitGroups) {
             const cards = suitGroups[s].sort((a, b) => a.getOrder() - b.getOrder());
-            
+
             for (let len = 3; len <= 5; len++) {
                 for (let i = 0; i <= cards.length - len; i++) {
                     const sub = cards.slice(i, i + len);
                     if (validateMeld(sub).valid) possible.push(sub);
                 }
             }
-            
+
             if (jokers.length > 0) {
-                 for (let i = 0; i < cards.length - 1; i++) {
-                     const diff = cards[i+1].getOrder() - cards[i].getOrder();
-                     // Run with gap filled by Joker (e.g. 4, 6 -> 4, JK, 6)
-                     if (diff === 2) {
-                         const run = [cards[i], jokers[0], cards[i+1]];
-                         if (validateMeld(run).valid) possible.push(run);
-                     }
-                     // Run with Joker at end (e.g. 4, 5 -> 4, 5, JK)
-                     if (diff === 1) {
-                         const run = [cards[i], cards[i+1], jokers[0]];
-                         if (validateMeld(run).valid) possible.push(run);
-                     }
-                 }
+                jokers.forEach(joker => {
+                    for (let i = 0; i < cards.length - 1; i++) {
+                        const diff = cards[i + 1].getOrder() - cards[i].getOrder();
+                        // Run with gap filled by Joker (e.g. 4, 6 -> 4, JK, 6)
+                        if (diff === 2) {
+                            const run = [cards[i], joker, cards[i + 1]];
+                            if (validateMeld(run).valid) possible.push(run);
+                        }
+                        // Run with Joker at end (e.g. 4, 5 -> 4, 5, JK)
+                        if (diff === 1) {
+                            const run = [cards[i], cards[i + 1], joker];
+                            if (validateMeld(run).valid) possible.push(run);
+                        }
+                        // Run with Joker at start (e.g. 4, 5 -> JK, 4, 5)
+                        if (diff === 1) {
+                            const run = [joker, cards[i], cards[i + 1]];
+                            if (validateMeld(run).valid) possible.push(run);
+                        }
+                    }
+                });
             }
         }
 
@@ -217,56 +425,107 @@ class AiSolver {
     private getCombinations(cards: ICard[], size: number): ICard[][] {
         if (size === 0) return [[]];
         if (cards.length === 0) return [];
-        
+
         const [head, ...tail] = cards;
-        
+
         const withHead = this.getCombinations(tail, size - 1).map(c => [head, ...c]);
         const withoutHead = this.getCombinations(tail, size);
-        
+
         return [...withHead, ...withoutHead];
     }
 
     private optimizeMelds(allMelds: ICard[][]): ICard[][] {
-        const scoredMelds = allMelds.map(m => {
+        // Pre-calculate metadata for performance
+        const candidates = allMelds.map(m => {
             const res = validateMeld(m);
-            return { 
-                meld: m, 
-                points: res.points, 
-                isPure: res.isPure, 
-                valid: res.valid,
-                type: res.type 
+            return {
+                meld: m,
+                points: res.points,
+                isPure: res.isPure && res.type === 'run',
+                valid: res.valid && res.points > 0,
+                mask: new Set(m.map(c => c.id))
             };
-        });
+        }).filter(c => c.valid);
 
-        // Filter out invalid melds
-        const validMelds = scoredMelds.filter(m => m.valid && m.points > 0);
-
-        validMelds.sort((a, b) => {
+        // Sort candidates to try promising ones first (heuristic optimization)
+        // 1. Pure Runs (if needed)
+        // 2. Length (longer first)
+        // 3. Points
+        candidates.sort((a, b) => {
             if (!this.hasOpened) {
-                const aPureRun = a.isPure && a.type === 'run';
-                const bPureRun = b.isPure && b.type === 'run';
-                
-                // Strict priority for Pure Runs to satisfy opening condition
-                if (aPureRun && !bPureRun) return -1;
-                if (!aPureRun && bPureRun) return 1;
+                if (a.isPure && !b.isPure) return -1;
+                if (!a.isPure && b.isPure) return 1;
             }
-            
-            // Standard fallback: prefer points
+            if (a.meld.length !== b.meld.length) return b.meld.length - a.meld.length;
             return b.points - a.points;
         });
 
-        const chosen: ICard[][] = [];
-        const usedIds = new Set<number>();
+        let bestSolution: ICard[][] = [];
+        let bestStats = { cards: 0, points: 0, hasPure: false };
 
-        for (const item of validMelds) {
-            const isOverlap = item.meld.some(c => usedIds.has(c.id));
-            if (!isOverlap) {
-                chosen.push(item.meld);
-                item.meld.forEach(c => usedIds.add(c.id));
+        const search = (index: number, currentMelds: ICard[][], usedIds: Set<number>, currentStats: { cards: number, points: number, hasPure: boolean }) => {
+            // Pruning: If we can't possibly beat the best score even if we take all remaining valid melds...
+            // (Complex to calculate accurately, so skipping for now given small N)
+
+            // Update Best
+            if (currentStats.cards > bestStats.cards) {
+                bestSolution = [...currentMelds];
+                bestStats = { ...currentStats };
+            } else if (currentStats.cards === bestStats.cards) {
+                // Tie-breaker: Pure Run (if needed)
+                if (!this.hasOpened) {
+                    if (currentStats.hasPure && !bestStats.hasPure) {
+                        bestSolution = [...currentMelds];
+                        bestStats = { ...currentStats };
+                    } else if (currentStats.hasPure === bestStats.hasPure) {
+                        if (currentStats.points > bestStats.points) {
+                            bestSolution = [...currentMelds];
+                            bestStats = { ...currentStats };
+                        }
+                    }
+                } else {
+                    // Tie-breaker: Points
+                    if (currentStats.points > bestStats.points) {
+                        bestSolution = [...currentMelds];
+                        bestStats = { ...currentStats };
+                    }
+                }
             }
-        }
 
-        return chosen;
+            for (let i = index; i < candidates.length; i++) {
+                const cand = candidates[i];
+
+                // Check overlap
+                let overlap = false;
+                for (const id of cand.mask) {
+                    if (usedIds.has(id)) {
+                        overlap = true;
+                        break;
+                    }
+                }
+
+                if (!overlap) {
+                    // Add
+                    cand.mask.forEach(id => usedIds.add(id));
+                    currentMelds.push(cand.meld);
+                    const newStats = {
+                        cards: currentStats.cards + cand.meld.length,
+                        points: currentStats.points + cand.points,
+                        hasPure: currentStats.hasPure || (cand.isPure ?? false)
+                    };
+
+                    search(i + 1, currentMelds, usedIds, newStats);
+
+                    // Backtrack
+                    currentMelds.pop();
+                    cand.mask.forEach(id => usedIds.delete(id));
+                }
+            }
+        };
+
+        search(0, [], new Set(), { cards: 0, points: 0, hasPure: false });
+
+        return bestSolution;
     }
 
     // --- Discard Logic ---
@@ -275,7 +534,7 @@ class AiSolver {
         // Simple check: Try adding card to every existing meld
         for (const meld of this.tableMelds) {
             const candidates = [...meld, card];
-            
+
             // We must instantiate real Card objects so they have methods like getOrder()
             // Otherwise validateMeld will crash.
             const safeCandidates = candidates.map(c => {
@@ -309,7 +568,7 @@ class AiSolver {
         // HARD/MEDIUM: Base Synergy + Strategic Penalties
         const scores = nonJokers.map(card => {
             let synergy = 0;
-            
+
             // Base Synergy: Pairs
             const sameRank = nonJokers.filter(c => c.id !== card.id && c.rank === card.rank).length;
             synergy += sameRank * 5;

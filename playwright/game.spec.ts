@@ -5,6 +5,8 @@ test.describe('Žolíky 95 Game Flow', () => {
   test.beforeEach(async ({ page }) => {
     // Navigate to the game and wait for initialization
     await page.goto('/');
+    // Close the start screen by starting a new game like a real player
+    await page.getByRole('button', { name: 'Start Game' }).click();
     await page.waitForSelector('#player-hand .card');
   });
 
@@ -42,9 +44,8 @@ test.describe('Žolíky 95 Game Flow', () => {
     // 3. Verify card leaves hand (13 -> 12)
     await expect(page.locator('#player-hand .card')).toHaveCount(12);
 
-    // 4. Verify game proceeds (status updates to CPU or next round)
-    // Immediately after discard, status usually shows CPU is thinking
-    await expect(page.locator('#status-text')).toContainText(/CPU/i);
+    // 4. Verify game proceeds (CPU turn kicks in or control returns for round 2)
+    await expect(page.locator('#status-text')).toContainText(/CPU|Round 2/i);
   });
 
   test('should allow drawing in round 2', async ({ page }) => {

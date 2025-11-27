@@ -2,6 +2,7 @@ import { GameState } from "./GameState";
 import { ICard } from "./types";
 import { SoundManager } from "./core/SoundManager";
 import { validateMeld, organizeMeld } from "./core/rules";
+import { evaluateHandProgress } from "./core/ai";
 import { Card } from "./core/Card"; // Import Card class for cloning
 
 export class UIManager {
@@ -60,6 +61,24 @@ export class UIManager {
         const isActionPhase = isMyTurn && phase === 'action';
         const selected = pHand.filter(c => c.selected);
         const isDebug = new URLSearchParams(window.location.search).has('debug');
+
+        if (isDebug) {
+            const pDist = evaluateHandProgress(pHand, hasOpened.human, melds);
+            const cDist = evaluateHandProgress(cHand, this.game.hasOpened.cpu, melds);
+            const total = pDist + cDist;
+            let pWin = 50;
+            if (total > 0) {
+                pWin = Math.round((cDist / total) * 100);
+            } else if (pDist === 0) {
+                pWin = 100;
+            } else if (cDist === 0) {
+                pWin = 0;
+            }
+
+            if (pHand.length > 0) {
+                this.ui.score.innerText += ` | Win: ${pWin}%`;
+            }
+        }
 
         // --- Valid Move Calculations ---
         let isMeldValid = false;
