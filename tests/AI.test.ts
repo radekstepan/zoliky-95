@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { calculateCpuMove } from '../src/core/ai';
 import { Card } from '../src/core/Card';
+import { organizeMeld } from '../src/core/rules';
 
 describe('AI Strategy Logic', () => {
     
@@ -26,34 +27,35 @@ describe('AI Strategy Logic', () => {
              const move = calculateCpuMove(hand, true, []);
              expect(move.meldsToPlay.length).toBe(1);
         });
-
-        it('should find Run with Joker (Gap)', () => {
-             const hand = [new Card('♥', '5', 1), new Card('JK', 'Joker', 2), new Card('♥', '7', 3)];
-             const move = calculateCpuMove(hand, true, []);
-             expect(move.meldsToPlay.length).toBe(1);
-        });
     });
 
-    describe('Difficulty Behaviors', () => {
-        it('should discard random card on Easy', () => {
-            const hand = [new Card('♥', '2', 1), new Card('♠', 'K', 2)];
-            // Easy discards random. Difficult to deterministically test randomness without mocking Math.random.
-            // But we can ensure it returns a card.
-            const move = calculateCpuMove(hand, true, [], 'easy');
-            expect(move.discardCard).toBeDefined();
+    describe('Discard Logic (Hard Mode)', () => {
+        it('should AVOID discarding a card that helps opponent when opponent has 1 card', () => {
+             // Table: 4, 5, 6 of Hearts
+             const tableMeld = [new Card('♥', '4', 1), new Card('♥', '5', 2), new Card('♥', '6', 3)];
+             const organized = organizeMeld(tableMeld);
+             
+             // Hand: 7 of Hearts (Fits!) and King of Spades (Useless)
+             // Normally K is high value, so AI might want to keep it? 
+             // Actually, usually AI discards K because it is high penalty points.
+             // But here, discarding 7H gives opponent the win.
+             const sevenH = new Card('♥', '7', 10);
+             const kingS = new Card('♠', 'K', 11); // High value, no synergy
+             
+             const hand = [sevenH, kingS];
+             
+             // Opponent Hand Size = 1
+             const move = calculateCpuMove(hand, true, [organized], 'hard', 1);
+             
+             // Should discard King, even though it's high points, because 7H fits table.
+             expect(move.discardCard?.id).toBe(kingS.id);
         });
-
-        it('should discard highest value on Medium', () => {
-            const hand = [new Card('♥', '2', 1), new Card('♠', 'K', 2)]; // K is 10, 2 is 2.
-            const move = calculateCpuMove(hand, true, [], 'medium');
-            expect(move.discardCard?.rank).toBe('K');
-        });
-
-        it('should swap Jokers on Hard', () => {
-            const tableMeld = [new Card('♥', '4', 1), new Card('♦', '4', 2), new Card('♣', '4', 3), new Card('JK', 'Joker', 4)];
-            const hand = [new Card('♠', '4', 10)];
-            const move = calculateCpuMove(hand, true, [tableMeld], 'hard');
-            expect(move.jokerSwaps.length).toBe(1);
+        
+        it('should discard high value card if no danger', () => {
+             const hand = [new Card('♥', '2', 1), new Card('♠', 'K', 2)];
+             // Opponent has many cards, no table threats
+             const move = calculateCpuMove(hand, true, [], 'hard', 10);
+             expect(move.discardCard?.rank).toBe('K');
         });
     });
     

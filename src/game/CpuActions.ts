@@ -17,12 +17,15 @@ export function processCpuTurn(state: IGameState): CpuTurnResult {
     drawCard(state, 'stock');
     const meldsPlayed: ICard[][] = [];
 
-    // If draw failed (deck empty?), check if we have cards to play/discard.
-    // If hand is empty after failed draw (shouldn't happen with correct flow), win?
-    // But typically draw failures replenish from discard.
-    
     if (state.round >= 3) {
-        const move = calculateCpuMove(state.cHand, state.hasOpened.cpu, state.melds, state.difficulty);
+        // Pass opponent (player) hand size for AI defense logic
+        const move = calculateCpuMove(
+            state.cHand, 
+            state.hasOpened.cpu, 
+            state.melds, 
+            state.difficulty,
+            state.pHand.length
+        );
 
         if (move.jokerSwaps && move.jokerSwaps.length > 0) {
             const swap = move.jokerSwaps[0];
@@ -78,7 +81,7 @@ export function processCpuTurn(state: IGameState): CpuTurnResult {
         }
     }
     
-    // Fallback: Random discard if logic fails, round < 3, or calculateCpuMove returned null discard
+    // Fallback: Random discard
     if (state.cHand.length > 0) {
         const randIdx = Math.floor(Math.random() * state.cHand.length);
         const disc = state.cHand.splice(randIdx, 1)[0];
@@ -95,6 +98,5 @@ export function processCpuTurn(state: IGameState): CpuTurnResult {
         return { discardedCard: disc, drawSource: 'stock', meldsPlayed };
     }
 
-    // Should only reach here if hand is empty but didn't trigger win previously
     return { winner: "CPU", score: state.pHand.length * -1, drawSource: 'stock', meldsPlayed };
 }

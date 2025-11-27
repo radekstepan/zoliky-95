@@ -1,6 +1,6 @@
 import { ICard, Difficulty } from "../types";
-import { validateMeld } from "./rules";
-import { SUITS, JOKER_SUIT } from "./Card";
+import { validateMeld, organizeMeld } from "./rules";
+import { SUITS, JOKER_SUIT, Card } from "./Card";
 
 export interface AiMove {
     meldsToPlay: ICard[][];
@@ -15,9 +15,10 @@ export function calculateCpuMove(
     hand: ICard[], 
     hasOpened: boolean, 
     tableMelds: ICard[][] = [], 
-    difficulty: Difficulty = 'hard'
+    difficulty: Difficulty = 'hard',
+    opponentHandSize: number = 12 // Default to safe assumption
 ): AiMove {
-    const state = new AiSolver(hand, hasOpened, tableMelds, difficulty);
+    const state = new AiSolver(hand, hasOpened, tableMelds, difficulty, opponentHandSize);
     return state.solve();
 }
 
@@ -26,12 +27,20 @@ class AiSolver {
     private hasOpened: boolean;
     private tableMelds: ICard[][];
     private difficulty: Difficulty;
+    private opponentHandSize: number;
 
-    constructor(hand: ICard[], hasOpened: boolean, tableMelds: ICard[][], difficulty: Difficulty) {
+    constructor(
+        hand: ICard[], 
+        hasOpened: boolean, 
+        tableMelds: ICard[][], 
+        difficulty: Difficulty,
+        opponentHandSize: number
+    ) {
         this.hand = [...hand]; 
         this.hasOpened = hasOpened;
         this.tableMelds = tableMelds || [];
         this.difficulty = difficulty;
+        this.opponentHandSize = opponentHandSize;
     }
 
     public solve(): AiMove {
@@ -262,6 +271,27 @@ class AiSolver {
 
     // --- Discard Logic ---
 
+    private fitsOnTable(card: ICard): boolean {
+        // Simple check: Try adding card to every existing meld
+        for (const meld of this.tableMelds) {
+            const candidates = [...meld, card];
+            
+            // We must instantiate real Card objects so they have methods like getOrder()
+            // Otherwise validateMeld will crash.
+            const safeCandidates = candidates.map(c => {
+                const clone = new Card(c.suit, c.rank, c.id);
+                // Important: Clone representation object if exists so we don't mutate state
+                if (c.representation) clone.representation = { ...c.representation };
+                return clone;
+            });
+
+            const organized = organizeMeld(safeCandidates);
+            const res = validateMeld(organized);
+            if (res.valid) return true;
+        }
+        return false;
+    }
+
     private pickBestDiscard(hand: ICard[]): ICard | null {
         if (hand.length === 0) return null;
 
@@ -276,28 +306,41 @@ class AiSolver {
             return nonJokers[randomIndex];
         }
 
-        // MEDIUM: Greedy (Points Only)
-        // Discard highest value card to minimize penalty points
-        if (this.difficulty === 'medium') {
-            const sortedByValue = [...nonJokers].sort((a, b) => b.getValue() - a.getValue());
-            return sortedByValue[0];
-        }
-
-        // HARD: Synergy Based (Original Logic)
+        // HARD/MEDIUM: Base Synergy + Strategic Penalties
         const scores = nonJokers.map(card => {
             let synergy = 0;
             
+            // Base Synergy: Pairs
             const sameRank = nonJokers.filter(c => c.id !== card.id && c.rank === card.rank).length;
             synergy += sameRank * 5;
 
+            // Base Synergy: Neighbors
             const sameSuit = nonJokers.filter(c => c.id !== card.id && c.suit === card.suit);
             const neighbors = sameSuit.filter(c => Math.abs(c.getOrder() - card.getOrder()) <= 2).length;
             synergy += neighbors * 3;
 
-            const score = synergy - (card.getValue() * 0.5);
+            // Base Value (Prefer discarding high value cards)
+            // Score = "Value of KEEPING this card"
+            // So negative value for keeping a high-point card (we want to dump it)
+            let score = synergy - (card.getValue() * 0.5);
+
+            // HARD MODE EXCLUSIVE: Board Awareness
+            if (this.difficulty === 'hard') {
+                if (this.fitsOnTable(card)) {
+                    // This card is VERY dangerous to discard
+                    // Penalty depends on Opponent Hand Size
+                    if (this.opponentHandSize <= 2) {
+                        score += 1000; // Do NOT discard (Keep score very high)
+                    } else {
+                        score += 20; // Prefer not to discard, but okay if desperate
+                    }
+                }
+            }
+
             return { card, score };
         });
 
+        // Sort by Score ascending (Lowest score = Best candidate to discard)
         scores.sort((a, b) => a.score - b.score);
 
         return scores[0].card;

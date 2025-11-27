@@ -747,18 +747,33 @@ export class UIManager {
         const sourceEl = source === 'stock' ? this.ui.stock : this.ui.discard;
         const startRect = sourceEl.getBoundingClientRect();
 
-        // Get the end position (rightmost CPU hand position after adding a card)
+        // Target Calculation: Land *after* the current last card.
         const cpuCards = this.ui.cHand.querySelectorAll('.card');
         const lastCard = cpuCards[cpuCards.length - 1] as HTMLElement;
-        const endRect = lastCard ? lastCard.getBoundingClientRect() : this.ui.cHand.getBoundingClientRect();
+        let leftPos, topPos;
+
+        if (lastCard) {
+            const lastRect = lastCard.getBoundingClientRect();
+            // With fixed CPU alignment (left-aligned), the next card goes to the right.
+            // Cards overlap by 25px, so effective width is ~45px. 
+            // But we want it to land "at the end", overlapping the current last card.
+            // Visually the last card has margin-right: 0. 
+            // The new card will make the previous one have margin-right -25px.
+            // So the new card should land at `lastRect.left + 45px`.
+            leftPos = lastRect.left + 45; 
+            topPos = lastRect.top;
+        } else {
+            // Empty hand (rare)
+            const handRect = this.ui.cHand.getBoundingClientRect();
+            leftPos = handRect.left;
+            topPos = handRect.top;
+        }
 
         const flyer = document.createElement('div');
 
         if (source === 'stock') {
-            // Animate a card-back for stock draws
             flyer.className = 'card card-back flying-card';
         } else {
-            // Animate the actual discard card face
             const topDiscard = this.game.discardPile[this.game.discardPile.length - 1];
             if (topDiscard) {
                 flyer.className = `card ${topDiscard.getColor()} flying-card`;
@@ -776,8 +791,8 @@ export class UIManager {
         document.body.appendChild(flyer);
         flyer.offsetHeight;
 
-        flyer.style.left = endRect.left + 'px';
-        flyer.style.top = endRect.top + 'px';
+        flyer.style.left = leftPos + 'px';
+        flyer.style.top = topPos + 'px';
 
         setTimeout(() => {
             if (document.body.contains(flyer)) document.body.removeChild(flyer);

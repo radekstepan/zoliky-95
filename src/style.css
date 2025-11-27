@@ -269,6 +269,19 @@ body {
     height: 110px;
 }
 
+/* 
+  CPU Hand Specifics: 
+  Prevent shifting by using a fixed centered container with left-aligned items.
+  Width 620px fits approx 13 cards with overlap.
+*/
+#cpu-hand {
+    justify-content: flex-start;
+    width: 620px;
+    max-width: 90vw;
+    margin: 0 auto;
+    padding-left: 20px; 
+}
+
 .hand .card {
     margin-right: -25px;
     /* Reduced overlap to show values */
