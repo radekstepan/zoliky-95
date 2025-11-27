@@ -14,7 +14,6 @@
 @font-face {
     font-family: 'PixelSans';
     src: local('MS Sans Serif'), local('Arial');
-    /* Fallback to Arial, aiming for system sans-serif look */
 }
 
 body {
@@ -60,13 +59,11 @@ body {
     height: 16px;
     margin-right: 5px;
     background: white;
-    /* Placeholder for icon */
     display: inline-block;
     vertical-align: middle;
     border-radius: 2px;
 }
 
-/* Shared style for all caption buttons (Main Window + Modals) */
 .title-bar button {
     width: 16px;
     height: 14px;
@@ -123,6 +120,112 @@ body {
     flex-direction: column;
 }
 
+/* START SCREEN STYLES */
+.start-screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: var(--felt-green);
+    z-index: 50; /* Covers deck/table */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.game-title {
+    font-family: 'Times New Roman', serif;
+    font-size: 48px;
+    font-weight: bold;
+    color: #ffff00;
+    text-shadow: 3px 3px 0 #000;
+    margin-bottom: 30px;
+    letter-spacing: 2px;
+}
+
+.win95-dialog {
+    width: 300px;
+    background: var(--win-gray);
+    border-top: 2px solid var(--win-light);
+    border-left: 2px solid var(--win-light);
+    border-right: 2px solid var(--win-darker);
+    border-bottom: 2px solid var(--win-darker);
+    box-shadow: 4px 4px 10px rgba(0,0,0,0.5);
+    display: flex;
+    flex-direction: column;
+    padding: 2px;
+}
+
+.dialog-header {
+    background: var(--win-blue);
+    color: white;
+    padding: 3px 4px;
+    font-weight: bold;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+}
+
+.dialog-header button {
+    width: 16px;
+    height: 14px;
+    background: var(--win-gray);
+    border-top: 1px solid var(--win-light);
+    border-left: 1px solid var(--win-light);
+    border-right: 1px solid var(--win-darker);
+    border-bottom: 1px solid var(--win-darker);
+    font-size: 10px;
+    line-height: 10px;
+    font-weight: bold;
+    padding: 0;
+    color: black;
+}
+
+.dialog-body {
+    padding: 15px;
+}
+
+.win95-fieldset {
+    border: 2px groove var(--win-light);
+    padding: 10px;
+    margin-bottom: 15px;
+}
+
+.win95-fieldset legend {
+    margin-left: 5px;
+    padding: 0 4px;
+}
+
+.radio-row {
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+}
+
+.radio-row input {
+    margin-right: 8px;
+}
+
+.dialog-footer {
+    display: flex;
+    justify-content: center;
+}
+
+.bold-btn {
+    font-weight: bold;
+    padding: 6px 20px;
+}
+
+.copyright {
+    margin-top: 40px;
+    font-size: 12px;
+    color: rgba(255,255,255,0.6);
+    text-shadow: 1px 1px 0 #000;
+}
+
 /* Zones */
 .opponent-zone {
     height: 120px;
@@ -137,7 +240,6 @@ body {
     position: relative;
     padding: 20px;
     padding-left: 140px;
-    /* Make room for deck area (stock + discard) */
     overflow-y: auto;
     display: flex;
     flex-wrap: wrap;
@@ -198,7 +300,6 @@ body {
     user-select: none;
 }
 
-/* Only interactive cards bob and have pointer */
 .card.interactive {
     cursor: pointer;
 }
@@ -211,8 +312,6 @@ body {
     transform: translateY(-15px);
 }
 
-/* If a card is both selected and interactive (hovered), allow it to bump slightly higher/different 
-   to show it's active, or just stay selected. */
 .card.interactive.selected:hover {
     transform: translateY(-18px);
 }
@@ -226,7 +325,6 @@ body {
     border: 2px solid white;
 }
 
-/* Special winning discard state: Offset to right and south */
 .card.winning-discard {
     transform: translate(40px, 20px);
     z-index: 5;
@@ -269,11 +367,6 @@ body {
     height: 110px;
 }
 
-/* 
-  CPU Hand Specifics: 
-  Prevent shifting by using a fixed centered container with left-aligned items.
-  Width 620px fits approx 13 cards with overlap.
-*/
 #cpu-hand {
     justify-content: flex-start;
     width: 620px;
@@ -284,14 +377,12 @@ body {
 
 .hand .card {
     margin-right: -25px;
-    /* Reduced overlap to show values */
 }
 
 .hand .card:last-child {
     margin-right: 0;
 }
 
-/* Dragging visual adjustments */
 .hand .card.dragging {
     opacity: 0.5;
     border: 2px dashed #ffff00;
@@ -302,8 +393,6 @@ body {
     border-left: 2px solid #ffff00;
 }
 
-/* Ensure hovered card is on top */
-/* Ensure hovered card is on top - Only for player */
 .player-zone .hand .card:hover {
     z-index: 100;
 }
@@ -317,12 +406,6 @@ body {
     border: none;
 }
 
-/* Highlight valid target for drag/selection */
-.meld-group.valid-target {
-    /* Cursor pointer is set via JS, no visual highlighting */
-}
-
-/* Interactive Meld Cursor */
 .meld-group.meld-interactive {
     cursor: pointer;
 }
@@ -340,11 +423,6 @@ body {
 .meld-group .card:last-child {
     margin-right: 0;
     margin-right: -15px;
-}
-
-/* Unconfirmed Melds */
-.meld-group.pending {
-
 }
 
 /* Controls Bar at Bottom */
@@ -403,16 +481,6 @@ body {
     cursor: default;
 }
 
-/* Valid Move Highlight */
-.win-btn.valid-move {
-    /* No visual highlighting - removed green background */
-}
-
-/* Specific danger button for cancel */
-.win-btn.danger {
-    color: #800000;
-}
-
 /* Custom Combo Box (Dropdown) */
 .win-combo {
     position: relative;
@@ -460,10 +528,9 @@ body {
     max-height: 150px;
     overflow-y: auto;
     z-index: 1000;
-    background: var(--win-gray); /* Match window bg */
+    background: var(--win-gray);
 }
 
-/* Match scrollbar to window style roughly */
 .win-combo-popup::-webkit-scrollbar {
     width: 12px;
 }
@@ -474,7 +541,6 @@ body {
     background: #c0c0c0;
     border: 1px solid #404040;
 }
-
 
 .actions-bar {
     display: flex;
@@ -558,7 +624,7 @@ body {
     width: 8px;
     height: 8px;
     top: -10px;
-    z-index: 2000; /* Above modal */
+    z-index: 2000;
     pointer-events: none;
 }
 

@@ -67,6 +67,26 @@ export class SoundManager {
         osc.stop(this.ctx.currentTime + 0.15);
     }
 
+    public playDeal() {
+        if (!this.enabled || !this.ctx) return;
+        this.resume();
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        
+        // Short, snappy "thwip" sound
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(600, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(300, this.ctx.currentTime + 0.05);
+        
+        gain.gain.setValueAtTime(0.05, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.05);
+        
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.05);
+    }
+
     public playSnap() {
         if (!this.enabled || !this.ctx) return;
         this.resume();

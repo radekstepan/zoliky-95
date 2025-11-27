@@ -30,10 +30,10 @@ export class UIManager {
 
     // Drag State
     private dragSourceIndex: number | null = null;
-    
+
     // Debug State
     public debugSwapCardId: number | null = null;
-    
+
     // Confetti State: No interval needed for CSS animation approach
 
     constructor(game: GameState) {
@@ -115,7 +115,7 @@ export class UIManager {
             if (bEl) {
                 bEl.innerHTML = this.renderCardInner(bottomCard);
                 bEl.className = `card ${bottomCard.getColor()}`;
-                
+
                 // User requirement: Active only in turn 3+ AND before opened
                 const canTakeJolly = isDrawPhase && round >= 3 && pHand.length === 12 && !hasOpened.human;
 
@@ -144,7 +144,7 @@ export class UIManager {
             const top = discardPile[discardPile.length - 1];
 
             // Check for winning discard condition
-            const isHumanWin = pHand.length === 0 && turn === 'human'; 
+            const isHumanWin = pHand.length === 0 && turn === 'human';
             const isCpuWin = cHand.length === 0 && turn === 'cpu';
             const isWinningCard = isHumanWin || isCpuWin;
 
@@ -152,7 +152,7 @@ export class UIManager {
                 // Winning State: Show previous card (if any) and overlay winner face down
                 let baseCardHtml = "";
                 let baseCardClass = "card";
-                
+
                 if (discardPile.length >= 2) {
                     const prev = discardPile[discardPile.length - 2];
                     baseCardHtml = this.renderCardInner(prev);
@@ -174,7 +174,7 @@ export class UIManager {
                 winCard.style.top = "0";
                 winCard.style.left = "0";
                 // Note: .winning-discard in CSS handles the transform offset
-                
+
                 this.ui.discard.appendChild(winCard);
             } else {
                 // Normal State
@@ -206,7 +206,7 @@ export class UIManager {
                 el.ondragover = (e) => this.handleDragOver(e, el);
                 el.ondragleave = (e) => this.handleDragLeave(e, el);
                 el.ondrop = (e) => this.handleDrop(e, idx);
-                
+
                 el.onclick = (e) => {
                     if (isDebug && e.shiftKey) {
                         this.handleDebugSwap(c);
@@ -236,14 +236,14 @@ export class UIManager {
             const grp = document.createElement('div');
             const isPending = turnMelds.includes(idx) && !this.game.hasOpened.human && turn === 'human';
             const isValidTarget = validTargets.includes(idx);
-            
+
             const isTurnMeld = turnMelds.includes(idx);
             // Determine if meld should show pointer cursor (card selected + (opened OR is turn meld))
             const showPointer = isActionPhase && selected.length > 0 && (this.game.isOpeningConditionMet() || isTurnMeld);
             const interactiveClass = showPointer ? 'meld-interactive' : '';
 
             grp.className = `meld-group ${isPending ? 'pending' : ''} ${isValidTarget ? 'valid-target' : ''} ${interactiveClass}`;
-            
+
             if (isActionPhase) {
                 grp.onclick = () => this.handleMeldClick(idx);
             } else {
@@ -284,6 +284,99 @@ export class UIManager {
             this.ui.menuUndo.classList.add('disabled');
             this.ui.menuUndo.onclick = null;
         }
+    }
+
+    public async animateDeal(onComplete: () => void) {
+        this.render();
+
+        const pCards = Array.from(this.ui.pHand.children) as HTMLElement[];
+        const cCards = Array.from(this.ui.cHand.children) as HTMLElement[];
+
+        // Hide cards initially
+        pCards.forEach(el => el.style.opacity = '0');
+        cCards.forEach(el => el.style.opacity = '0');
+
+        const stockRect = this.ui.stock.getBoundingClientRect();
+        const maxCards = Math.max(pCards.length, cCards.length);
+
+        const dealSpeed = 10; // ms interval between cards
+        const flyDuration = 350; // ms transition
+
+        let completed = 0;
+        let total = pCards.length + cCards.length;
+
+        const checkDone = () => {
+            completed++;
+            if (completed >= total) {
+                setTimeout(onComplete, 200); // Small buffer after last card
+            }
+        };
+
+        for (let i = 0; i < maxCards; i++) {
+            // Player Card
+            if (i < pCards.length) {
+                setTimeout(() => {
+                    this.sound.playDeal();
+                    const target = pCards[i];
+                    const rect = target.getBoundingClientRect();
+
+                    const flyer = document.createElement('div');
+                    flyer.className = target.className;
+                    flyer.innerHTML = target.innerHTML;
+                    flyer.classList.add('flying-card');
+                    flyer.classList.remove('selected', 'interactive');
+
+                    // Force custom transition speed
+                    flyer.style.transition = `all ${flyDuration}ms ease-out`;
+
+                    this.setFlyerPos(flyer, stockRect);
+                    document.body.appendChild(flyer);
+                    flyer.offsetHeight; // Reflow
+
+                    this.setFlyerPos(flyer, rect);
+
+                    setTimeout(() => {
+                        if (document.body.contains(flyer)) document.body.removeChild(flyer);
+                        target.style.opacity = '1';
+                        checkDone();
+                    }, flyDuration);
+
+                }, i * dealSpeed * 2);
+            }
+
+            // CPU Card
+            if (i < cCards.length) {
+                setTimeout(() => {
+                    this.sound.playDeal();
+                    const target = cCards[i];
+                    const rect = target.getBoundingClientRect();
+
+                    const flyer = document.createElement('div');
+                    flyer.className = 'card card-back flying-card';
+                    flyer.style.transition = `all ${flyDuration}ms ease-out`;
+
+                    this.setFlyerPos(flyer, stockRect);
+                    document.body.appendChild(flyer);
+                    flyer.offsetHeight;
+
+                    this.setFlyerPos(flyer, rect);
+
+                    setTimeout(() => {
+                        if (document.body.contains(flyer)) document.body.removeChild(flyer);
+                        target.style.opacity = '1';
+                        checkDone();
+                    }, flyDuration);
+
+                }, i * dealSpeed * 2 + dealSpeed);
+            }
+        }
+    }
+
+    private setFlyerPos(flyer: HTMLElement, rect: DOMRect) {
+        flyer.style.left = rect.left + 'px';
+        flyer.style.top = rect.top + 'px';
+        flyer.style.width = rect.width + 'px';
+        flyer.style.height = rect.height + 'px';
     }
 
     private handleDebugSwap(card: ICard) {
@@ -351,17 +444,17 @@ export class UIManager {
         for (let i = 0; i < 100; i++) {
             const confetti = document.createElement('div');
             confetti.className = 'confetti';
-            
+
             // Random properties
             const color = colors[Math.floor(Math.random() * colors.length)];
             const left = Math.random() * 100; // vw
             const duration = 2 + Math.random() * 3; // 2-5s
             const delay = Math.random() * 2; // 0-2s delay
-            
+
             confetti.style.backgroundColor = color;
             confetti.style.left = `${left}vw`;
             confetti.style.animation = `confetti-fall ${duration}s linear ${delay}s infinite`;
-            
+
             document.body.appendChild(confetti);
         }
     }
@@ -577,37 +670,37 @@ export class UIManager {
     }
 
     public animateUndoDraw(startRect: DOMRect, onComplete: () => void) {
-         this.sound.playSnap();
-         // The card is now in the discard pile logically and visually (after render).
-         const discardEl = this.ui.discard; 
-         
-         if (discardEl) {
-             const flyer = document.createElement('div');
-             flyer.className = discardEl.className;
-             flyer.classList.add('flying-card');
-             flyer.innerHTML = discardEl.innerHTML;
-             
-             // Start at Hand position
-             flyer.style.left = startRect.left + 'px';
-             flyer.style.top = startRect.top + 'px';
-             flyer.style.width = startRect.width + 'px';
-             flyer.style.height = startRect.height + 'px';
-             
-             document.body.appendChild(flyer);
-             flyer.offsetHeight;
-             
-             const endRect = discardEl.getBoundingClientRect();
-             
-             flyer.style.left = endRect.left + 'px';
-             flyer.style.top = endRect.top + 'px';
-             
-             setTimeout(() => {
+        this.sound.playSnap();
+        // The card is now in the discard pile logically and visually (after render).
+        const discardEl = this.ui.discard;
+
+        if (discardEl) {
+            const flyer = document.createElement('div');
+            flyer.className = discardEl.className;
+            flyer.classList.add('flying-card');
+            flyer.innerHTML = discardEl.innerHTML;
+
+            // Start at Hand position
+            flyer.style.left = startRect.left + 'px';
+            flyer.style.top = startRect.top + 'px';
+            flyer.style.width = startRect.width + 'px';
+            flyer.style.height = startRect.height + 'px';
+
+            document.body.appendChild(flyer);
+            flyer.offsetHeight;
+
+            const endRect = discardEl.getBoundingClientRect();
+
+            flyer.style.left = endRect.left + 'px';
+            flyer.style.top = endRect.top + 'px';
+
+            setTimeout(() => {
                 if (document.body.contains(flyer)) document.body.removeChild(flyer);
                 onComplete();
-             }, 500);
-         } else {
-             onComplete();
-         }
+            }, 500);
+        } else {
+            onComplete();
+        }
     }
 
     public animateToMeld(cards: ICard[], startRects: Record<number, DOMRect>, meldIndex: number, onComplete: () => void) {
@@ -638,7 +731,7 @@ export class UIManager {
         this.sound.playSnap();
 
         const flyer = document.createElement('div');
-        
+
         // If winning, animate face down (dramatic finish)
         if (isWinning) {
             flyer.className = `card card-back flying-card`;
@@ -657,7 +750,7 @@ export class UIManager {
         flyer.offsetHeight;
 
         let endRect: DOMRect;
-        
+
         // Determine destination rect
         // If winning, try to target the offset winning-card element specifically
         if (isWinning) {
@@ -677,13 +770,13 @@ export class UIManager {
 
         setTimeout(() => {
             if (document.body.contains(flyer)) document.body.removeChild(flyer);
-            
+
             // Restore visibility of winning card if we hid it
             if (isWinning) {
                 const winEl = this.ui.discard.querySelector('.winning-discard');
                 if (winEl) (winEl as HTMLElement).style.opacity = '1';
             }
-            
+
             onComplete();
         }, 500);
     }
@@ -697,7 +790,7 @@ export class UIManager {
         const startRect = lastCard ? lastCard.getBoundingClientRect() : this.ui.cHand.getBoundingClientRect();
 
         const flyer = document.createElement('div');
-        
+
         if (isWinning) {
             flyer.className = `card card-back flying-card`;
             flyer.innerHTML = '';
@@ -715,7 +808,7 @@ export class UIManager {
         flyer.offsetHeight;
 
         let endRect: DOMRect;
-        
+
         if (isWinning) {
             const winEl = this.ui.discard.querySelector('.winning-discard');
             if (winEl) {
@@ -733,7 +826,7 @@ export class UIManager {
 
         setTimeout(() => {
             if (document.body.contains(flyer)) document.body.removeChild(flyer);
-             if (isWinning) {
+            if (isWinning) {
                 const winEl = this.ui.discard.querySelector('.winning-discard');
                 if (winEl) (winEl as HTMLElement).style.opacity = '1';
             }
@@ -760,7 +853,7 @@ export class UIManager {
             // Visually the last card has margin-right: 0. 
             // The new card will make the previous one have margin-right -25px.
             // So the new card should land at `lastRect.left + 45px`.
-            leftPos = lastRect.left + 45; 
+            leftPos = lastRect.left + 45;
             topPos = lastRect.top;
         } else {
             // Empty hand (rare)
@@ -807,7 +900,7 @@ export class UIManager {
         }
 
         let meldIndex = 0;
-        
+
         const playNextMeld = () => {
             if (meldIndex >= melds.length) {
                 onComplete();
@@ -816,37 +909,37 @@ export class UIManager {
 
             const currentMeld = melds[meldIndex];
             this.sound.playSnap();
-            
+
             let cardsDone = 0;
             currentMeld.forEach(c => {
-                 const el = this.ui.table.querySelector(`[data-id="${c.id}"]`) as HTMLElement;
-                 if (el) {
-                     const cpuRect = this.ui.cHand.getBoundingClientRect();
-                     // Use approx center of CPU hand as origin
-                     const startRect = {
-                         left: cpuRect.left + cpuRect.width / 2 - 35,
-                         top: cpuRect.top,
-                         width: 70,
-                         height: 100,
-                         right: 0, bottom: 0, x: 0, y: 0, toJSON: () => {}
-                     } as DOMRect;
-                     
-                     this.animateTransition(el, startRect, el.getBoundingClientRect(), () => {
-                         cardsDone++;
-                         if (cardsDone === currentMeld.length) {
-                             setTimeout(() => {
-                                 meldIndex++;
-                                 playNextMeld();
-                             }, 200); 
-                         }
-                     });
-                 } else {
-                     cardsDone++;
-                     if (cardsDone === currentMeld.length) {
-                         meldIndex++;
-                         playNextMeld();
-                     }
-                 }
+                const el = this.ui.table.querySelector(`[data-id="${c.id}"]`) as HTMLElement;
+                if (el) {
+                    const cpuRect = this.ui.cHand.getBoundingClientRect();
+                    // Use approx center of CPU hand as origin
+                    const startRect = {
+                        left: cpuRect.left + cpuRect.width / 2 - 35,
+                        top: cpuRect.top,
+                        width: 70,
+                        height: 100,
+                        right: 0, bottom: 0, x: 0, y: 0, toJSON: () => { }
+                    } as DOMRect;
+
+                    this.animateTransition(el, startRect, el.getBoundingClientRect(), () => {
+                        cardsDone++;
+                        if (cardsDone === currentMeld.length) {
+                            setTimeout(() => {
+                                meldIndex++;
+                                playNextMeld();
+                            }, 200);
+                        }
+                    });
+                } else {
+                    cardsDone++;
+                    if (cardsDone === currentMeld.length) {
+                        meldIndex++;
+                        playNextMeld();
+                    }
+                }
             });
         };
 

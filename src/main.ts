@@ -21,51 +21,49 @@ const HELP_HTML = `
 
 const App = {
     init: () => {
+        // Just show the start screen initially
+        App.showStartScreen();
+    },
+
+    showStartScreen: () => {
+        const el = document.getElementById('start-screen');
+        if (el) el.style.display = 'flex';
+        // Ensure other modals are closed
+        ui.closeWinModal();
+        ui.closeAlert();
+        ui.closeDebugModal();
+        // Clear board visually (render empty game state or just hide logic)
+        // Since game state persists, we just cover it with overlay.
+    },
+
+    startGameFromUI: () => {
+        // Get difficulty
+        const radios = document.getElementsByName('difficulty');
+        let diff: Difficulty = 'medium';
+        for (const r of radios) {
+            if ((r as HTMLInputElement).checked) {
+                diff = (r as HTMLInputElement).value as Difficulty;
+                break;
+            }
+        }
+
+        // Setup Game
         const isDebug = new URLSearchParams(window.location.search).has('debug');
         game.initGame(isDebug);
-        ui.render();
-        // Updated initial text to reflect Rule: Start by discarding (Hand size 13)
-        ui.updateStatus("Your turn. Discard a card to start.");
-        App.updateDifficultyUI();
+        game.setDifficulty(diff);
+        
+        // Hide Start Screen
+        const el = document.getElementById('start-screen');
+        if (el) el.style.display = 'none';
+
+        // DEAL ANIMATION
+        ui.animateDeal(() => {
+             ui.updateStatus(`Game Started. Difficulty: ${diff.toUpperCase()}. Discard a card to start.`);
+        });
     },
 
     showHelp: () => {
         ui.showAlert(HELP_HTML, "Help Topics", "❓", true);
-    },
-
-    toggleDifficultyMenu: () => {
-        const el = document.getElementById('difficulty-menu');
-        if (el) {
-            // Ensure UI is current before showing
-            App.updateDifficultyUI();
-            el.style.display = el.style.display === 'none' ? 'block' : 'none';
-        }
-    },
-
-    setDifficulty: (level: Difficulty) => {
-        game.setDifficulty(level);
-        ui.updateStatus(`Difficulty set to: ${level.toUpperCase()}`);
-        
-        const el = document.getElementById('difficulty-menu');
-        if (el) el.style.display = 'none';
-        
-        App.updateDifficultyUI();
-    },
-
-    updateDifficultyUI: () => {
-        const levels: {key: Difficulty, label: string}[] = [
-            { key: 'easy', label: 'Easy (Novice)' },
-            { key: 'medium', label: 'Medium (Casual)' },
-            { key: 'hard', label: 'Hard (Pro)' }
-        ];
-
-        levels.forEach(lvl => {
-            const el = document.getElementById(`menu-diff-${lvl.key}`);
-            if (el) {
-                const prefix = (game.difficulty === lvl.key) ? "✓ " : "\u00A0\u00A0\u00A0"; 
-                el.innerText = prefix + lvl.label;
-            }
-        });
     },
 
     // --- Dropdown Logic ---
@@ -225,7 +223,6 @@ const App = {
                                 game.discardPile.push(dCard);
 
                                 if (isWin) {
-                                    // For win, render first to establish table state, but hide winning card destination
                                     ui.render();
                                     const winCard = document.querySelector('.winning-discard') as HTMLElement;
                                     if (winCard) winCard.style.opacity = '0';
@@ -238,14 +235,12 @@ const App = {
                                         ui.updateStatus(`Round ${game.round}. Your turn.`);
                                     }, isWin);
                                 } else {
-                                    // Normal discard: Animate then render
                                     ui.animateCpuDiscard(dCard, () => {
                                         ui.render();
                                         ui.updateStatus(`Round ${game.round}. Your turn.`);
                                     }, isWin);
                                 }
                             } else {
-                                // No discard (e.g. deck empty logic or edge case)
                                 ui.render();
                                 if (cpuRes.winner) {
                                     ui.showWinModal(`${cpuRes.winner} Wins! You lose ${cpuRes.score} pts.`);

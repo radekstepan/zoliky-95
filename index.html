@@ -11,7 +11,7 @@
     <div class="title-bar">
         <div style="display:flex; align-items:center;">
             <span class="title-icon">🃏</span>
-            <span>Žolíky for Windows</span>
+            <span>Žolíky 95</span>
         </div>
         <div class="window-controls">
             <button>_</button>
@@ -21,25 +21,52 @@
     </div>
     
     <div class="menu-bar">
-        <div class="menu-item" onclick="window.game.init()">New Game</div>
-        <div class="menu-item" id="menu-difficulty" onclick="window.game.toggleDifficultyMenu()">Options</div>
+        <div class="menu-item" onclick="window.game.showStartScreen()">New Game</div>
         <div class="menu-item" id="menu-undo">Undo</div>
         <div class="menu-item" onclick="window.game.showHelp()">Help</div>
     </div>
 
-    <!-- Difficulty Submenu -->
-    <div id="difficulty-menu" class="window" style="display:none; position:absolute; top:60px; left:80px; width:160px; height:auto; z-index:200;">
-        <div id="menu-diff-easy" class="menu-item" onclick="window.game.setDifficulty('easy')">&nbsp;&nbsp;&nbsp;Easy (Novice)</div>
-        <div id="menu-diff-medium" class="menu-item" onclick="window.game.setDifficulty('medium')">&nbsp;&nbsp;&nbsp;Medium (Casual)</div>
-        <div id="menu-diff-hard" class="menu-item" onclick="window.game.setDifficulty('hard')">&nbsp;&nbsp;&nbsp;Hard (Pro)</div>
-    </div>
-
     <div class="game-area">
+        <!-- Start Screen Overlay -->
+        <div id="start-screen" class="start-screen">
+            <div class="game-title">Žolíky 95</div>
+            
+            <div class="win95-dialog">
+                <div class="dialog-header">
+                    <span>New Game</span>
+                    <button onclick="/* No close action on start screen */">X</button>
+                </div>
+                <div class="dialog-body">
+                    <fieldset class="win95-fieldset">
+                        <legend>Select Difficulty</legend>
+                        
+                        <div class="radio-row">
+                            <input type="radio" name="difficulty" id="diff-easy" value="easy">
+                            <label for="diff-easy">Novice (Easy)</label>
+                        </div>
+                        
+                        <div class="radio-row">
+                            <input type="radio" name="difficulty" id="diff-medium" value="medium" checked>
+                            <label for="diff-medium">Casual (Medium)</label>
+                        </div>
+                        
+                        <div class="radio-row">
+                            <input type="radio" name="difficulty" id="diff-hard" value="hard">
+                            <label for="diff-hard">Pro (Hard)</label>
+                        </div>
+                    </fieldset>
+
+                    <div class="dialog-footer">
+                        <button class="win-btn bold-btn" onclick="window.game.startGameFromUI()">Start Game</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Decks -->
         <div class="deck-area">
             <div style="position: relative;">
                 <div class="pile-label">Stock</div>
-                <!-- Bottom card will be injected here by JS -->
                 <div id="stock-pile" class="card card-back" onclick="window.game.humanDraw('stock')"></div>
             </div>
             <div>
@@ -67,8 +94,8 @@
     </div>
 
     <div class="status-bar">
-        <div class="status-panel status-msg" id="status-text">Welcome to Žolíky 95.</div>
-        <div class="status-panel status-score" id="score-text">Rd: 1 | Pts: 0</div>
+        <div class="status-panel status-msg" id="status-text">Ready</div>
+        <div class="status-panel status-score" id="score-text"></div>
     </div>
 </div>
 
@@ -80,7 +107,7 @@
         </div>
         <div class="modal-body" id="modal-msg">You Win!</div>
         <div class="modal-footer">
-            <button class="win-btn" onclick="window.closeModal(); window.game.init();">Play Again</button>
+            <button class="win-btn" onclick="window.closeModal(); window.game.showStartScreen();">Play Again</button>
         </div>
     </div>
 </div>
@@ -109,7 +136,6 @@
             <button onclick="window.game.closeDebugModal()">X</button>
         </div>
         <div class="modal-body" style="text-align: left; padding: 20px;">
-            
             <div style="margin-bottom: 15px;">
                 <label>Rank:</label>
                 <div class="win-combo" id="combo-rank" data-value="2">
@@ -135,7 +161,6 @@
                     </div>
                 </div>
             </div>
-
             <div>
                 <label>Suit:</label>
                 <div class="win-combo" id="combo-suit" data-value="♥">
@@ -152,7 +177,6 @@
                     </div>
                 </div>
             </div>
-
         </div>
         <div class="modal-footer">
             <button class="win-btn" onclick="window.game.submitDebugSwap()">Swap</button>
