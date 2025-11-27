@@ -201,40 +201,64 @@ const App = {
                 setTimeout(() => {
                     const cpuRes = game.processCpuTurn();
 
-                    if (cpuRes.drawSource) {
-                        ui.animateCpuDraw(cpuRes.drawSource, () => {
-                            if (cpuRes.discardedCard) {
-                                ui.animateCpuDiscard(cpuRes.discardedCard, () => {
-                                    if (cpuRes.winner) {
-                                        ui.showWinModal(`${cpuRes.winner} Wins! You lose ${cpuRes.score} pts.`);
-                                    }
+                    const handleCpuFinish = () => {
+                        const dCard = cpuRes.discardedCard;
+                        const isWin = !!cpuRes.winner;
+
+                        if (dCard) {
+                            // 1. Revert discard in GameState temporarily
+                            game.discardPile.pop(); 
+                            game.cHand.push(dCard);
+                        }
+
+                        // 2. Render table with new melds (but discard reverted)
+                        ui.render();
+
+                        // 3. Animate CPU melds
+                        const meldsPlayed = cpuRes.meldsPlayed || [];
+                        ui.animateCpuMelds(meldsPlayed, () => {
+                            
+                            // 4. Proceed to Discard after Melds Done
+                            if (dCard) {
+                                // Re-apply discard
+                                game.cHand = game.cHand.filter(c => c.id !== dCard.id);
+                                game.discardPile.push(dCard);
+
+                                if (isWin) {
+                                    // For win, render first to establish table state, but hide winning card destination
                                     ui.render();
-                                    ui.updateStatus(`Round ${game.round}. Your turn.`);
-                                }, !!cpuRes.winner);
+                                    const winCard = document.querySelector('.winning-discard') as HTMLElement;
+                                    if (winCard) winCard.style.opacity = '0';
+                                    
+                                    ui.animateCpuDiscard(dCard, () => {
+                                        if (cpuRes.winner) {
+                                            ui.showWinModal(`${cpuRes.winner} Wins! You lose ${cpuRes.score} pts.`);
+                                        }
+                                        ui.render();
+                                        ui.updateStatus(`Round ${game.round}. Your turn.`);
+                                    }, isWin);
+                                } else {
+                                    // Normal discard: Animate then render
+                                    ui.animateCpuDiscard(dCard, () => {
+                                        ui.render();
+                                        ui.updateStatus(`Round ${game.round}. Your turn.`);
+                                    }, isWin);
+                                }
                             } else {
+                                // No discard (e.g. deck empty logic or edge case)
+                                ui.render();
                                 if (cpuRes.winner) {
                                     ui.showWinModal(`${cpuRes.winner} Wins! You lose ${cpuRes.score} pts.`);
                                 }
-                                ui.render();
                                 ui.updateStatus(`Round ${game.round}. Your turn.`);
                             }
                         });
+                    };
+
+                    if (cpuRes.drawSource) {
+                        ui.animateCpuDraw(cpuRes.drawSource, handleCpuFinish);
                     } else {
-                         if (cpuRes.discardedCard) {
-                            ui.animateCpuDiscard(cpuRes.discardedCard, () => {
-                                if (cpuRes.winner) {
-                                    ui.showWinModal(`${cpuRes.winner} Wins! You lose ${cpuRes.score} pts.`);
-                                }
-                                ui.render();
-                                ui.updateStatus(`Round ${game.round}. Your turn.`);
-                            }, !!cpuRes.winner);
-                        } else {
-                            if (cpuRes.winner) {
-                                ui.showWinModal(`${cpuRes.winner} Wins! You lose ${cpuRes.score} pts.`);
-                            }
-                            ui.render();
-                            ui.updateStatus(`Round ${game.round}. Your turn.`);
-                        }
+                        handleCpuFinish();
                     }
                 }, 1000);
             };

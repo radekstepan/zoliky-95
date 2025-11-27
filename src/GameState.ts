@@ -1,10 +1,15 @@
 import { Deck } from "./core/Deck";
-import { ICard, TurnOwner, TurnPhase, Difficulty, Rank, Suit } from "./types";
-import { sortHandLogic, validateMeld, organizeMeld } from "./core/rules";
-import { calculateCpuMove } from "./core/ai";
+import { ICard, TurnOwner, TurnPhase, Difficulty, Rank, Suit, IGameState } from "./types";
+import { sortHandLogic, validateMeld } from "./core/rules";
 import { Card } from "./core/Card";
 
-export class GameState {
+// Action Modules
+import { attemptMeld, addToExistingMeld, attemptJokerSwap, cancelTurnMelds } from "./game/MeldActions";
+import { drawCard, undoDraw, attemptDiscard, resetTurnState } from "./game/TurnActions";
+import { processCpuTurn, CpuTurnResult } from "./game/CpuActions";
+import { attemptJollyHand } from "./game/JollyActions";
+
+export class GameState implements IGameState {
     public deck: Deck;
     public pHand: ICard[] = [];
     public cHand: ICard[] = [];
@@ -22,7 +27,6 @@ export class GameState {
 
     public turnMelds: number[] = [];
     public turnPoints: number = 0;
-    // Track additions to existing melds for cancellation
     public turnAdditions: { meldIndex: number, cards: ICard[] }[] = [];
 
     public drawnFromDiscardId: number | null = null;
@@ -43,37 +47,24 @@ export class GameState {
         this.hasOpened = { human: false, cpu: false };
         this.hasPureRun = { human: false, cpu: false };
         this.round = 1;
-        this.resetTurnState();
+        resetTurnState(this);
 
         if (debug) {
-            // Debug Hand Construction: Ready to win
-            // Pure Run (30pts): Q♥, K♥, A♥
             this.pHand.push(this.deck.extractCard('Q', '♥')!);
             this.pHand.push(this.deck.extractCard('K', '♥')!);
             this.pHand.push(this.deck.extractCard('A', '♥')!);
-            
-            // Set (27pts): 9♦, 9♣, 9♠
             this.pHand.push(this.deck.extractCard('9', '♦')!);
             this.pHand.push(this.deck.extractCard('9', '♣')!);
             this.pHand.push(this.deck.extractCard('9', '♠')!);
-            
-            // Run w/ Joker (9pts): 4♠, 5♠, Joker
             this.pHand.push(this.deck.extractCard('4', '♠')!);
             this.pHand.push(this.deck.extractCard('5', '♠')!);
             this.pHand.push(this.deck.extractCard('Joker', 'JK')!);
-
-            // Set w/ Joker (30pts): J♦, J♣, Joker
             this.pHand.push(this.deck.extractCard('J', '♦')!);
             this.pHand.push(this.deck.extractCard('J', '♣')!);
             this.pHand.push(this.deck.extractCard('Joker', 'JK')!);
-
-            // Discard: 2♣
             this.pHand.push(this.deck.extractCard('2', '♣')!);
-
-            // Ensure no undefineds in case deck logic failed
             this.pHand = this.pHand.filter(c => !!c);
         } else {
-            // Standard Rule: Check bottom 3 for Jokers
             const cutJokers = this.deck.checkBottomThreeForJokers();
             if (cutJokers.length > 0) {
                 this.pHand.push(...cutJokers);
@@ -102,452 +93,80 @@ export class GameState {
         this.difficulty = level;
     }
 
-    public resetTurnState() {
-        this.turnMelds = [];
-        this.turnPoints = 0;
-        this.turnAdditions = [];
-        this.drawnFromDiscardId = null;
-        this.discardCardUsed = false;
-        this.swappedJokerIds = [];
-        this.isJollyTurn = false;
-    }
-
-    // New: Handle manual reordering
-    public reorderHand(fromIndex: number, toIndex: number) {
-        if (fromIndex < 0 || fromIndex >= this.pHand.length || toIndex < 0 || toIndex >= this.pHand.length) return;
-        const [card] = this.pHand.splice(fromIndex, 1);
-        this.pHand.splice(toIndex, 0, card);
-    }
-
-    // DEBUG: Swap a card in hand with a new arbitrary card
-    public debugReplaceCard(cardId: number, rank: Rank, suit: Suit) {
-        const idx = this.pHand.findIndex(c => c.id === cardId);
-        if (idx !== -1) {
-            // Generate a high ID to avoid collision with deck cards (0-200)
-            const newId = 1000 + Math.floor(Math.random() * 100000);
-            const newCard = new Card(suit, rank, newId);
-            // Preserve selection state if convenient, or just reset
-            newCard.selected = this.pHand[idx].selected; 
-            this.pHand[idx] = newCard;
-        }
-    }
+    // --- Helpers ---
 
     public isOpeningConditionMet(): boolean {
-        // Already opened
+        // We replicate the logic here for UI usage, or delegate to a pure function if exported
+        // For simple read-only access, this logic is fine here.
         if (this.hasOpened.human) return true;
-        
-        // Pending open check
         if (this.turnPoints < 36) return false;
-
-        const hasPureRun = this.turnMelds.some(idx => {
+        return this.turnMelds.some(idx => {
             if (idx >= this.melds.length) return false;
             const res = validateMeld(this.melds[idx]);
             return res.type === 'run' && res.isPure;
         });
-
-        return hasPureRun;
     }
 
     public getTurnActiveCardIds(): number[] {
         const ids: number[] = [];
-        // Additions to existing melds
         this.turnAdditions.forEach(add => add.cards.forEach(c => ids.push(c.id)));
-        // New Melds created this turn
         this.turnMelds.forEach(idx => {
             if (this.melds[idx]) this.melds[idx].forEach(c => ids.push(c.id));
         });
         return ids;
     }
 
-    public drawCard(source: 'stock' | 'discard'): { success: boolean; card?: ICard; msg?: string } {
-        if (this.phase !== 'draw') return { success: false };
-
-        let card: ICard | undefined;
-
-        if (source === 'stock') {
-            card = this.deck.draw();
-            if (!card) {
-                if (this.discardPile.length > 0) {
-                    this.deck.setCards([...this.discardPile]);
-                    this.deck.shuffle();
-                    this.discardPile = [];
-                    card = this.deck.draw();
-                } else {
-                    return { success: false, msg: "Deck Empty" };
-                }
-            }
-        } else {
-            if (this.round < 3) {
-                return { success: false, msg: "Cannot draw from discard until Round 3." };
-            }
-            if (this.discardPile.length === 0) return { success: false };
-            card = this.discardPile.pop();
-            if (card) this.drawnFromDiscardId = card.id;
-        }
-
-        if (!card) return { success: false, msg: "Error drawing card" };
-
-        if (this.turn === 'human') {
-            this.pHand.push(card);
-            // No auto-sort for human to enable manual sorting
-        } else {
-            this.cHand.push(card);
-            sortHandLogic(this.cHand);
-        }
-
-        this.phase = 'action';
-        return { success: true, card };
+    public reorderHand(fromIndex: number, toIndex: number) {
+        if (fromIndex < 0 || fromIndex >= this.pHand.length || toIndex < 0 || toIndex >= this.pHand.length) return;
+        const [card] = this.pHand.splice(fromIndex, 1);
+        this.pHand.splice(toIndex, 0, card);
     }
 
-    public undoDraw(): { success: boolean; msg?: string } {
-        if (this.phase !== 'action') return { success: false, msg: "Not in action phase." };
-        if (!this.drawnFromDiscardId) return { success: false, msg: "Did not draw from discard." };
-        if (this.turnMelds.length > 0) return { success: false, msg: "Cannot undo after melding." };
-        if (this.turnAdditions.length > 0) return { success: false, msg: "Cannot undo after adding to melds." };
-        if (this.swappedJokerIds.length > 0) return { success: false, msg: "Cannot undo after swapping Jokers." };
-
-        const cardIdx = this.pHand.findIndex(c => c.id === this.drawnFromDiscardId);
-        if (cardIdx === -1) return { success: false, msg: "Card not found in hand." };
-
-        const card = this.pHand.splice(cardIdx, 1)[0];
-        card.selected = false;
-
-        this.discardPile.push(card);
-
-        this.drawnFromDiscardId = null;
-        this.phase = 'draw';
-
-        return { success: true };
-    }
-
-    private checkRequirementUsage(cards: ICard[]) {
-        if (this.drawnFromDiscardId) {
-            if (cards.some(c => c.id === this.drawnFromDiscardId)) {
-                this.discardCardUsed = true;
-            }
-        }
-        if (this.swappedJokerIds.length > 0) {
-            const usedJokers = cards.filter(c => this.swappedJokerIds.includes(c.id));
-            usedJokers.forEach(j => {
-                const idx = this.swappedJokerIds.indexOf(j.id);
-                if (idx > -1) this.swappedJokerIds.splice(idx, 1);
-            });
+    public debugReplaceCard(cardId: number, rank: Rank, suit: Suit) {
+        const idx = this.pHand.findIndex(c => c.id === cardId);
+        if (idx !== -1) {
+            const newId = 1000 + Math.floor(Math.random() * 100000);
+            const newCard = new Card(suit, rank, newId);
+            newCard.selected = this.pHand[idx].selected; 
+            this.pHand[idx] = newCard;
         }
     }
 
-    public attemptMeld(selectedCards: ICard[]): { success: boolean; msg?: string } {
-        if (this.round < 3) return { success: false, msg: `Cannot meld until Round 3.` };
+    // --- Delegated Action Methods ---
 
-        // Fix: Reset representation for cards coming from hand (e.g. reused Jokers)
-        selectedCards.forEach(c => c.representation = undefined);
-
-        const result = validateMeld(selectedCards);
-        if (!result.valid) return { success: false, msg: "Invalid Meld. Check suits/ranks/adjacency." };
-
-        this.checkRequirementUsage(selectedCards);
-
-        const organized = organizeMeld(selectedCards);
-
-        this.melds.push(organized);
-        this.turnMelds.push(this.melds.length - 1);
-        this.turnPoints += result.points;
-
-        const ids = selectedCards.map(c => c.id);
-        this.pHand = this.pHand.filter(c => !ids.includes(c.id));
-
-        return { success: true };
+    public drawCard(source: 'stock' | 'discard') {
+        return drawCard(this, source);
     }
 
-    public attemptJokerSwap(meldIndex: number, handCardId: number): { success: boolean; msg?: string } {
-        if (this.turn === 'human' && !this.hasOpened.human) return { success: false, msg: "Must open before swapping Jokers." };
-        if (this.turn === 'cpu' && !this.hasOpened.cpu) return { success: false, msg: "CPU must open before swap." };
-
-        const meld = [...this.melds[meldIndex]];
-        const jokerIdx = meld.findIndex(c => c.isJoker);
-        if (jokerIdx === -1) return { success: false, msg: "No Joker in selected meld." };
-
-        const joker = meld[jokerIdx];
-
-        // Joker must have a representation (fixed position)
-        if (!joker.representation) {
-            return { success: false, msg: "Joker position not set." };
-        }
-
-        const hand = this.turn === 'human' ? this.pHand : this.cHand;
-        const handCard = hand.find(c => c.id === handCardId);
-        if (!handCard) return { success: false, msg: "Card not in hand." };
-
-        // The hand card MUST exactly match the Joker's representation
-        if (handCard.rank !== joker.representation.rank || handCard.suit !== joker.representation.suit) {
-            return {
-                success: false,
-                msg: `Joker represents ${joker.representation.rank}${joker.representation.suit}. You need that exact card to swap.`
-            };
-        }
-
-        // Swap the cards
-        meld[jokerIdx] = handCard;
-
-        // Validate the meld still works with the swap
-        const organized = organizeMeld(meld);
-        const res = validateMeld(organized);
-        if (!res.valid) return { success: false, msg: "Card does not fit in meld." };
-
-        // Rule: Can only swap from a Set if it results in the full 4-suit Set on the table.
-        // A Set meld allows max 4. Swapping one in just replaces the Joker.
-        // The rule implies you can't leave a "partial" set with a missing suit on the table when taking the Joker.
-        // Since Set max is 4, this means the table must have 4 cards (including the Joker) before swap.
-        if (res.type === 'set') {
-            if (organized.length < 4) {
-                 return { success: false, msg: "Can only swap Joker from a complete Set (4 cards)." };
-            }
-        }
-
-        this.melds[meldIndex] = organized;
-
-        if (this.turn === 'human') {
-            this.pHand = this.pHand.filter(c => c.id !== handCardId);
-            joker.representation = undefined;
-            joker.selected = false;
-            this.pHand.push(joker);
-            this.swappedJokerIds.push(joker.id);
-            // No auto sort for human
-        } else {
-            this.cHand = this.cHand.filter(c => c.id !== handCardId);
-            joker.representation = undefined;
-            this.cHand.push(joker);
-            sortHandLogic(this.cHand);
-        }
-
-        return { success: true };
+    public undoDraw() {
+        return undoDraw(this);
     }
 
-    public attemptJollyHand(): { success: boolean; msg?: string; winner?: string } {
-        if (this.round < 3) return { success: false, msg: "Cannot take Jolly Hand until Round 3." };
-        if (this.hasOpened.human) return { success: false, msg: "Cannot take Jolly Hand after opening." };
-        if (this.pHand.length !== 12) return { success: false, msg: "Need exactly 12 cards to take Jolly Hand." };
-        if (!this.bottomCard) return { success: false, msg: "No bottom card available." };
-        if (this.phase !== 'draw') return { success: false, msg: "Can only take Jolly Hand at start of turn." };
+    public attemptMeld(selectedCards: ICard[]) {
+        return attemptMeld(this, selectedCards);
+    }
 
-        this.pHand.push(this.bottomCard);
-        this.bottomCard = null;
-        this.phase = 'action';
-        this.isJollyTurn = true;
+    public addToExistingMeld(meldIndex: number, selectedCards: ICard[]) {
+        return addToExistingMeld(this, meldIndex, selectedCards);
+    }
 
-        return { success: true, msg: "Jolly Hand! You must meld ALL cards now to win." };
+    public attemptJokerSwap(meldIndex: number, handCardId: number) {
+        return attemptJokerSwap(this, meldIndex, handCardId);
     }
 
     public cancelTurnMelds() {
-        // 1. Revert additions to existing melds
-        for (let i = this.turnAdditions.length - 1; i >= 0; i--) {
-            const { meldIndex, cards } = this.turnAdditions[i];
-            const cardIds = cards.map(c => c.id);
-
-            // Remove cards from meld
-            if (this.melds[meldIndex]) {
-                const meld = this.melds[meldIndex].filter(c => !cardIds.includes(c.id));
-                // Re-organize to ensure internal consistency (joker reps)
-                this.melds[meldIndex] = organizeMeld(meld);
-            }
-
-            // Return to hand
-            cards.forEach(c => c.representation = undefined);
-            this.pHand.push(...cards);
-        }
-        this.turnAdditions = [];
-
-        // 2. Revert new melds
-        for (let i = this.turnMelds.length - 1; i >= 0; i--) {
-            const idx = this.turnMelds[i];
-            const cards = this.melds[idx];
-            cards.forEach(c => c.representation = undefined);
-            this.pHand.push(...cards);
-            this.melds.splice(idx, 1);
-        }
-
-        this.pHand.forEach(c => c.selected = false);
-        this.turnMelds = [];
-        this.turnPoints = 0;
-
-        this.discardCardUsed = false;
+        return cancelTurnMelds(this);
     }
 
-    public attemptDiscard(cardId: number): { success: boolean; msg?: string; winner?: string, score?: number } {
-        if (this.isJollyTurn && this.pHand.length > 1) {
-            return { success: false, msg: "Jolly Hand must meld ALL cards to win." };
-        }
-
-        if (!this.hasOpened.human && this.turnMelds.length > 0) {
-            if (this.turnPoints < 36) {
-                return { success: false, msg: `Opening melds must sum to 36+. Current: ${this.turnPoints}` };
-            }
-            const hasPureRun = this.turnMelds.some(idx => {
-                const res = validateMeld(this.melds[idx]);
-                return res.type === 'run' && res.isPure;
-            });
-
-            if (!hasPureRun) return { success: false, msg: "Opening requires at least 1 Pure Run (Straight Flush)." };
-
-            this.hasOpened.human = true;
-            this.turnMelds = [];
-            this.turnAdditions = []; // Commit additions
-        }
-
-        if (this.drawnFromDiscardId && !this.discardCardUsed) {
-            return { success: false, msg: "Must meld the card picked from discard pile." };
-        }
-
-        if (this.swappedJokerIds.some(id => this.pHand.some(c => c.id === id && c.id !== cardId))) {
-            return { success: false, msg: "Must meld the Swapped Joker(s)." };
-        }
-        if (this.swappedJokerIds.includes(cardId)) {
-            return { success: false, msg: "Cannot discard a Swapped Joker. Must meld it." };
-        }
-
-        const cardIdx = this.pHand.findIndex(c => c.id === cardId);
-        if (cardIdx === -1) return { success: false, msg: "Card not found" };
-
-        const card = this.pHand.splice(cardIdx, 1)[0];
-        card.selected = false;
-
-        // Push to discard pile regardless of outcome to maintain state for UI
-        this.discardPile.push(card);
-
-        if (this.pHand.length === 0) {
-            // Guard: Cannot win if you haven't opened (unless special Jolly turn)
-            if (!this.hasOpened.human && !this.isJollyTurn) {
-                // Restore card to hand because the move is invalid as a win
-                this.discardPile.pop();
-                this.pHand.push(card);
-                return { success: false, msg: "Cannot win without opening requirements (36pts + Pure Run)." };
-            }
-
-            return { success: true, winner: 'Human', score: this.cHand.length * -1 };
-        }
-
-        this.turn = 'cpu';
-        this.phase = 'draw';
-        this.resetTurnState();
-        return { success: true };
+    public attemptDiscard(cardId: number) {
+        return attemptDiscard(this, cardId);
     }
 
-    public addToExistingMeld(meldIndex: number, selectedCards: ICard[]): { success: boolean; msg?: string; winner?: string } {
-        const isCreatedThisTurn = this.turnMelds.includes(meldIndex);
-
-        // Relaxed rule: If it's a meld created this turn, we can add to it even if opening limit not met yet.
-        if (!isCreatedThisTurn && !this.isOpeningConditionMet()) {
-            return { success: false, msg: "Must open (36pts + Pure Run) before adding to existing melds." };
-        }
-
-        // Fix: Reset representation for cards coming from hand
-        selectedCards.forEach(c => c.representation = undefined);
-
-        const targetMeld = [...this.melds[meldIndex]];
-        // Calculate old points if we need to update turnPoints for a turnMeld
-        const oldPoints = isCreatedThisTurn ? validateMeld(targetMeld).points : 0;
-
-        const candidates = [...targetMeld, ...selectedCards];
-
-        const organized = organizeMeld(candidates);
-
-        const res = validateMeld(organized);
-        if (!res.valid) {
-             // CLEANUP: Reset representations if move failed!
-             selectedCards.forEach(c => c.representation = undefined);
-             return { success: false, msg: "Cannot add cards to this meld." };
-        }
-
-        this.checkRequirementUsage(selectedCards);
-
-        // If it's a turn meld, we don't need to track specific additions for cancellation
-        // because cancelTurnMelds removes the whole meld.
-        // If it's an existing meld, we DO need to track additions.
-        if (!isCreatedThisTurn) {
-            this.turnAdditions.push({ meldIndex, cards: [...selectedCards] });
-        }
-
-        this.melds[meldIndex] = organized;
-        
-        // Update turn points if modifying a turn meld to ensure accurate opening calculations
-        if (isCreatedThisTurn) {
-            this.turnPoints = (this.turnPoints - oldPoints) + res.points;
-        }
-
-        const ids = selectedCards.map(c => c.id);
-        this.pHand = this.pHand.filter(c => !ids.includes(c.id));
-
-        if (this.pHand.length === 0) return { success: true, winner: "Human" };
-
-        return { success: true };
+    public attemptJollyHand() {
+        return attemptJollyHand(this);
     }
 
-    public processCpuTurn(): { winner?: string, score?: number, discardedCard?: ICard, drawSource?: 'stock' | 'discard' } {
-        this.drawCard('stock');
-
-        if (this.round >= 3) {
-            // Updated to pass difficulty
-            const move = calculateCpuMove(this.cHand, this.hasOpened.cpu, this.melds, this.difficulty);
-
-            if (move.jokerSwaps && move.jokerSwaps.length > 0) {
-                const swap = move.jokerSwaps[0];
-                this.attemptJokerSwap(swap.meldIndex, swap.handCardId);
-            }
-
-            move.meldsToPlay.forEach(meld => {
-                if (!this.hasOpened.cpu) {
-                    const res = validateMeld(meld);
-                    if (res.type === 'run' && res.isPure) this.hasPureRun.cpu = true;
-                }
-
-                const organized = organizeMeld(meld);
-                this.melds.push(organized);
-                this.cHand = this.cHand.filter(c => !meld.includes(c));
-            });
-
-            if (!this.hasOpened.cpu && move.meldsToPlay.length > 0) {
-                this.hasOpened.cpu = true;
-            }
-
-            if (move.discardCard) {
-                const d = move.discardCard;
-                if (this.cHand.some(c => c.id === d.id)) {
-                    this.cHand = this.cHand.filter(c => c.id !== d.id);
-                    
-                    // Push to discard pile before checking for win to ensure UI can render it
-                    this.discardPile.push(d);
-
-                    if (this.cHand.length === 0) return { winner: "CPU", score: this.pHand.length * -1, discardedCard: d, drawSource: 'stock' };
-                    
-                    this.round++;
-                    this.turn = 'human';
-                    this.phase = 'draw';
-                    this.resetTurnState();
-                    return { discardedCard: d, drawSource: 'stock' };
-                } else {
-                    if (this.cHand.length > 0) {
-                        const rand = this.cHand.pop()!;
-                        this.discardPile.push(rand);
-                        this.round++;
-                        this.turn = 'human';
-                        this.phase = 'draw';
-                        this.resetTurnState();
-                        return { discardedCard: rand, drawSource: 'stock' };
-                    } else {
-                        return { winner: "CPU", score: this.pHand.length * -1, drawSource: 'stock' };
-                    }
-                }
-            }
-        } else {
-            const randIdx = Math.floor(Math.random() * this.cHand.length);
-            const disc = this.cHand.splice(randIdx, 1)[0];
-            this.discardPile.push(disc);
-            this.round++;
-            this.turn = 'human';
-            this.phase = 'draw';
-            this.resetTurnState();
-            return { discardedCard: disc, drawSource: 'stock' };
-        }
-
-        return { drawSource: 'stock' };
+    public processCpuTurn(): CpuTurnResult {
+        return processCpuTurn(this);
     }
 }

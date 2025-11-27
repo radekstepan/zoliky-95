@@ -66,7 +66,8 @@ body {
     border-radius: 2px;
 }
 
-.window-controls button {
+/* Shared style for all caption buttons (Main Window + Modals) */
+.title-bar button {
     width: 16px;
     height: 14px;
     background: var(--win-gray);
@@ -411,7 +412,7 @@ body {
     border-left: 2px solid var(--win-dark);
     border-right: 2px solid var(--win-light);
     border-bottom: 2px solid var(--win-light);
-    padding: 2px 5px;
+    padding: 2px 0 2px 5px; /* Removed right padding to push arrow flush right */
     display: flex;
     justify-content: space-between;
     align-items: center;

@@ -20,25 +20,28 @@ function getRankValue(rank: Rank, isAceLow: boolean): number {
 }
 
 export function organizeMeld(cards: ICard[]): ICard[] {
-    const validRes = validateMeld(cards);
-    if (!validRes.valid || !validRes.type) return cards;
-
-    // Detect collision: If a real card exists that matches a Joker's representation,
-    // we MUST reset that Joker's representation so it can be recalculated (moved to end/start).
+    // 1. Reset Joker representations for any Joker that conflicts with a real card in the set/run
     const nonJokers = cards.filter(c => !c.isJoker);
-    cards.filter(c => c.isJoker).forEach(j => {
+    const jokers = cards.filter(c => c.isJoker);
+
+    // Safety: If a Joker claims to be a card that is now physically present (real), 
+    // we MUST clear that Joker's representation to force recalculation.
+    jokers.forEach(j => {
         if (j.representation) {
-            const collision = nonJokers.some(real => 
-                real.rank === j.representation!.rank && 
-                real.suit === j.representation!.suit
+            const conflict = nonJokers.some(real => 
+                real.suit === j.representation!.suit && 
+                real.rank === j.representation!.rank
             );
-            if (collision) j.representation = undefined;
+            if (conflict) {
+                j.representation = undefined;
+            }
         }
     });
 
-    // DON'T clear existing representations - preserve Joker positions
-    const jokers = cards.filter(c => c.isJoker);
-    // Note: jokers list needs to be re-evaluated for those with/without rep after collision check above
+    const validRes = validateMeld(cards);
+    if (!validRes.valid || !validRes.type) return cards;
+
+    // Split again after potential cleans
     const jokersWithRep = jokers.filter(j => j.representation !== undefined);
     const jokersWithoutRep = jokers.filter(j => j.representation === undefined);
 
@@ -46,14 +49,12 @@ export function organizeMeld(cards: ICard[]): ICard[] {
         const rank = nonJokers[0].rank;
         const usedSuits = new Set(nonJokers.map(c => c.suit));
 
-        // Also mark suits used by Jokers with existing representations
         jokersWithRep.forEach(j => {
             if (j.representation) usedSuits.add(j.representation.suit);
         });
 
         const allSuits: Suit[] = ['♥', '♦', '♣', '♠'];
 
-        // Only assign representations to Jokers that don't have them
         let jokerIdx = 0;
         for (const s of allSuits) {
             if (!usedSuits.has(s) && jokerIdx < jokersWithoutRep.length) {
@@ -74,6 +75,8 @@ export function organizeMeld(cards: ICard[]): ICard[] {
     if (validRes.type === 'run') {
         const hasAce = nonJokers.some(c => c.rank === 'A');
         let isAceLow = false;
+        
+        // Determine Ace Low/High context based on other cards
         if (hasAce) {
             const lowRanks = ['2', '3', '4', '5'];
             if (nonJokers.some(c => lowRanks.includes(c.rank))) isAceLow = true;
@@ -89,7 +92,7 @@ export function organizeMeld(cards: ICard[]): ICard[] {
             return oa - ob;
         });
 
-        // CRITICAL FIX: Ensure valid connectivity.
+        // Calculate gaps to verify if existing Joker reps are still valid
         let gapsToFill = 0;
         const getRawIdx = (c: ICard) => {
              if (isAceLow && c.rank === 'A') return -1;
@@ -105,7 +108,12 @@ export function organizeMeld(cards: ICard[]): ICard[] {
             }
         }
 
-        if (gapsToFill > jokersWithoutRep.length) {
+        // If we have more gaps than free jokers + existing rep jokers, 
+        // something is wrong or shifted. Reset all to be safe.
+        // Actually, safer to reset if ANY gaps exist, to ensure optimal placement (filling gaps first).
+        if (gapsToFill > 0) {
+            // Force recalculation of ALL jokers if there are internal gaps to fill.
+            // This prevents a Joker at the end from staying at the end when it should fill a new gap.
             jokers.forEach(j => j.representation = undefined);
             jokersWithRep.length = 0;
             jokersWithoutRep.length = 0;
@@ -166,28 +174,49 @@ export function organizeMeld(cards: ICard[]): ICard[] {
         }
 
         // Handle remaining Jokers (add to ends)
-        const currentStart = allCardsInSequence.length > 0 ? allCardsInSequence[0].idx : 0;
         const currentEnd = allCardsInSequence.length > 0 ? allCardsInSequence[allCardsInSequence.length - 1].idx : 0;
 
         while (availableJokers.length > 0) {
             const j = availableJokers.shift()!;
-            // currentEnd tracks the index of the last *original* item.
-            // finalSeq.length grows as we add jokers.
-            const nextIdx = currentEnd + (finalSeq.length - allCardsInSequence.length);
+            // Calculate where the sequence currently ends in terms of Rank Index
+            // We need to look at finalSeq to see what the last rank actually is now
+            // But finalSeq contains mix of cards. 
+            // Easier approach: Track end index.
+            
+            // Logic: Try appending to High End first
+            // Calculate hypothetical next index
+            // We need to know the rank index of the last element in finalSeq
+            const lastCard = finalSeq[finalSeq.length - 1];
+            let lastIdx = -99;
+            if (lastCard.isJoker && lastCard.representation) {
+                lastIdx = getRankIdx({ rank: lastCard.representation.rank, getOrder: () => 0 } as ICard);
+            } else if (!lastCard.isJoker) {
+                lastIdx = getRankIdx(lastCard);
+            } else {
+                // Should not happen if logic flows, but fallback
+                lastIdx = currentEnd;
+            }
 
-            // FIX: Ensure we don't exceed RANKS length. nextIdx is the current last index.
-            // We want to add at nextIdx + 1. So nextIdx + 1 must be valid (< RANKS.length).
-            if (nextIdx + 1 < RANKS.length) {
-                j.representation = { rank: getRankFromIdx(nextIdx + 1), suit: suit };
+            if (lastIdx + 1 < RANKS.length) {
+                j.representation = { rank: getRankFromIdx(lastIdx + 1), suit: suit };
                 finalSeq.push(j);
             } else {
-                const firstIdx = currentStart;
-                const prevIdx = firstIdx - 1;
-                if (prevIdx >= -1) {
-                    j.representation = { rank: getRankFromIdx(prevIdx), suit: suit };
+                // Try Prepending to Low End
+                const firstCard = finalSeq[0];
+                let firstIdx = 99;
+                if (firstCard.isJoker && firstCard.representation) {
+                     firstIdx = getRankIdx({ rank: firstCard.representation.rank, getOrder: () => 0 } as ICard);
+                } else if (!firstCard.isJoker) {
+                     firstIdx = getRankIdx(firstCard);
+                }
+
+                if (firstIdx - 1 >= -1) { // -1 is Ace Low
+                    j.representation = { rank: getRankFromIdx(firstIdx - 1), suit: suit };
                     finalSeq.unshift(j);
                 } else {
-                    finalSeq.push(j);
+                    // Cannot fit at either end (e.g. A-2...K-A sequence full?)
+                    // Just push it effectively invalidating visual but keeping card
+                    finalSeq.push(j); 
                 }
             }
         }
@@ -248,8 +277,8 @@ export function validateMeld(cards: ICard[]): MeldResult {
                     const idxB = getIdx(sorted[i + 1]);
                     const diff = idxB - idxA;
 
-                    if (diff < 1) return { valid: false, points: 0 };
-                    if (diff > 2) return { valid: false, points: 0 };
+                    if (diff < 1) return { valid: false, points: 0 }; // Duplicate rank in run (impossible with same suit unless multiple decks, but caught here)
+                    if (diff > 2) return { valid: false, points: 0 }; // Gap too large for single Joker? Note: Rules say jokers cannot be adjacent. So max gap size is 1 missing card. Diff 2 means 1 missing. Diff 3 means 2 missing (requires 2 jokers adjacent).
 
                     const missingCount = diff - 1;
                     gaps += missingCount;
@@ -268,9 +297,21 @@ export function validateMeld(cards: ICard[]): MeldResult {
 
                 if (gaps > jokerCount) return { valid: false, points: 0 };
 
+                // Rule: "Two Jokers cannot be adjacent".
+                // We've already ensured gaps of size > 1 are invalid (diff > 2).
+                // So gaps are always size 1. This means Jokers filling gaps are isolated.
+                // However, we must check remaining Jokers placed at Ends.
+                
                 const remainingJokers = jokerCount - gaps;
+                
+                // If we have remaining jokers > 1, and they are placed at ONE end, they would be adjacent.
+                // We must be able to distribute them: one left, one right?
+                // Or if we have 3 remaining jokers? Impossible to avoid adjacency if only 2 ends.
                 if (remainingJokers > 2) return { valid: false, points: 0 }; 
 
+                // But wait, what if we place 1 left, 1 right? That is valid.
+                // What if we have 2 remaining, but one end is blocked (e.g. Ace Low start)?
+                
                 let rightIdx = getIdx(sorted[sorted.length - 1]);
                 let leftIdx = getIdx(sorted[0]);
 
@@ -300,6 +341,7 @@ export function validateMeld(cards: ICard[]): MeldResult {
                     }
 
                     if (!placed && pending > 0) {
+                        // Cannot place remaining joker without adjacency or bounds error
                         return { valid: false, points: 0 };
                     }
                 }

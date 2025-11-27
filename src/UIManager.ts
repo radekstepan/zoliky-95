@@ -748,4 +748,57 @@ export class UIManager {
             onComplete();
         }, 500);
     }
+
+    public animateCpuMelds(melds: ICard[][], onComplete: () => void) {
+        if (!melds || melds.length === 0) {
+            onComplete();
+            return;
+        }
+
+        let meldIndex = 0;
+        
+        const playNextMeld = () => {
+            if (meldIndex >= melds.length) {
+                onComplete();
+                return;
+            }
+
+            const currentMeld = melds[meldIndex];
+            this.sound.playSnap();
+            
+            let cardsDone = 0;
+            currentMeld.forEach(c => {
+                 const el = this.ui.table.querySelector(`[data-id="${c.id}"]`) as HTMLElement;
+                 if (el) {
+                     const cpuRect = this.ui.cHand.getBoundingClientRect();
+                     // Use approx center of CPU hand as origin
+                     const startRect = {
+                         left: cpuRect.left + cpuRect.width / 2 - 35,
+                         top: cpuRect.top,
+                         width: 70,
+                         height: 100,
+                         right: 0, bottom: 0, x: 0, y: 0, toJSON: () => {}
+                     } as DOMRect;
+                     
+                     this.animateTransition(el, startRect, el.getBoundingClientRect(), () => {
+                         cardsDone++;
+                         if (cardsDone === currentMeld.length) {
+                             setTimeout(() => {
+                                 meldIndex++;
+                                 playNextMeld();
+                             }, 200); 
+                         }
+                     });
+                 } else {
+                     cardsDone++;
+                     if (cardsDone === currentMeld.length) {
+                         meldIndex++;
+                         playNextMeld();
+                     }
+                 }
+            });
+        };
+
+        playNextMeld();
+    }
 }
