@@ -51,14 +51,14 @@ const App = {
         const isDebug = new URLSearchParams(window.location.search).has('debug');
         game.initGame(isDebug);
         game.setDifficulty(diff);
-        
+
         // Hide Start Screen
         const el = document.getElementById('start-screen');
         if (el) el.style.display = 'none';
 
         // DEAL ANIMATION
         ui.animateDeal(() => {
-             ui.updateStatus(`Game Started. Difficulty: ${diff.toUpperCase()}. Discard a card to start.`);
+            ui.updateStatus(`Game Started. Difficulty: ${diff.toUpperCase()}. Discard a card to start.`);
         });
     },
 
@@ -74,7 +74,7 @@ const App = {
             // Hide all first
             document.getElementById('combo-rank-list')!.style.display = 'none';
             document.getElementById('combo-suit-list')!.style.display = 'none';
-            
+
             if (!isVisible) list.style.display = 'block';
         }
     },
@@ -83,7 +83,7 @@ const App = {
         const container = document.getElementById(`combo-${type}`);
         const display = document.getElementById(`combo-${type}-text`);
         const list = document.getElementById(`combo-${type}-list`);
-        
+
         if (container) container.dataset.value = value;
         if (display) display.innerText = text;
         if (list) list.style.display = 'none';
@@ -92,14 +92,14 @@ const App = {
     submitDebugSwap: () => {
         const uiInstance = (window as any).game_ui as UIManager;
         if (!uiInstance.debugSwapCardId) return;
-        
+
         // Get values from custom dropdowns
         const rankEl = document.getElementById('combo-rank');
         const suitEl = document.getElementById('combo-suit');
-        
+
         let rank = rankEl?.dataset.value || '2';
         let suit = suitEl?.dataset.value || '♥';
-        
+
         // Validate Joker logic
         if (rank === 'Joker' && suit !== 'JK') suit = 'JK';
         if (suit === 'JK' && rank !== 'Joker') rank = 'Joker';
@@ -136,7 +136,7 @@ const App = {
         const startRect = cardEl ? cardEl.getBoundingClientRect() : null;
 
         const res = game.undoDraw();
-        
+
         if (res.success) {
             ui.render();
             if (startRect) {
@@ -199,13 +199,23 @@ const App = {
                 setTimeout(() => {
                     const cpuRes = game.processCpuTurn();
 
+                    // Revert the draw temporarily so we can animate it
+                    let drawnCard = null;
+                    if (cpuRes.drawSource && game.cHand.length > 0) {
+                        // The drawn card is the last one in the hand (or was melded/discarded)
+                        // We need to restore it to animate the draw
+                        // Find it by checking which card wasn't there before
+                        // Actually simpler: just remove the last card since draw adds to end
+                        drawnCard = game.cHand.pop();
+                    }
+
                     const handleCpuFinish = () => {
                         const dCard = cpuRes.discardedCard;
                         const isWin = !!cpuRes.winner;
 
                         if (dCard) {
                             // 1. Revert discard in GameState temporarily
-                            game.discardPile.pop(); 
+                            game.discardPile.pop();
                             game.cHand.push(dCard);
                         }
 
@@ -215,7 +225,7 @@ const App = {
                         // 3. Animate CPU melds
                         const meldsPlayed = cpuRes.meldsPlayed || [];
                         ui.animateCpuMelds(meldsPlayed, () => {
-                            
+
                             // 4. Proceed to Discard after Melds Done
                             if (dCard) {
                                 // Re-apply discard
@@ -226,7 +236,7 @@ const App = {
                                     ui.render();
                                     const winCard = document.querySelector('.winning-discard') as HTMLElement;
                                     if (winCard) winCard.style.opacity = '0';
-                                    
+
                                     ui.animateCpuDiscard(dCard, () => {
                                         if (cpuRes.winner) {
                                             ui.showWinModal(`${cpuRes.winner} Wins! You lose ${cpuRes.score} pts.`);
@@ -250,9 +260,16 @@ const App = {
                         });
                     };
 
-                    if (cpuRes.drawSource) {
-                        ui.animateCpuDraw(cpuRes.drawSource, handleCpuFinish);
+                    // Animate draw first, then re-add the card and continue
+                    if (cpuRes.drawSource && drawnCard) {
+                        ui.animateCpuDraw(cpuRes.drawSource, () => {
+                            // Re-add the drawn card
+                            game.cHand.push(drawnCard!);
+                            handleCpuFinish();
+                        });
                     } else {
+                        // No draw or couldn't find drawn card, just continue
+                        if (drawnCard) game.cHand.push(drawnCard);
                         handleCpuFinish();
                     }
                 }, 1000);
@@ -285,9 +302,9 @@ const App = {
         const startRects = ui.captureCardPositions(cardIds);
 
         game.cancelTurnMelds();
-        
+
         ui.render();
-        
+
         ui.animateReturnToHand(cardIds, startRects, () => {
             ui.updateStatus("Melds cancelled.");
         });
