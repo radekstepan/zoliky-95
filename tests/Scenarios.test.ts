@@ -62,6 +62,90 @@ describe('Gameplay Scenarios', () => {
             expect(res.success).toBe(true);
             expect(game.hasOpened.human).toBe(true);
         });
+
+        it('should allow adding to existing melds after meeting opening requirements in same turn', () => {
+            // Setup: CPU has already placed a meld on the table (e.g., from previous turn)
+            const cpuMeld = [new Card('♠', '7', 100), new Card('♠', '8', 101), new Card('♠', '9', 102)];
+            game.melds.push(organizeMeld(cpuMeld));
+
+            // Player has opening melds: Pure Run (30pts) + Set (6pts) = 36pts
+            const run = [new Card('♥', 'Q', 1), new Card('♥', 'K', 2), new Card('♥', 'A', 3)];
+            const set = [new Card('♠', '2', 4), new Card('♣', '2', 5), new Card('♦', '2', 6)];
+
+            // Player also has jokers to add to CPU's meld
+            const joker1 = new Card('JK', 'Joker', 7);
+            const joker2 = new Card('JK', 'Joker', 8);
+
+            game.pHand.push(...run, ...set, joker1, joker2);
+
+            // Player melds to meet opening requirements
+            game.attemptMeld(run);
+            game.attemptMeld(set);
+
+            // Now player should be able to add jokers to existing CPU meld
+            const addRes = game.addToExistingMeld(0, [joker1, joker2]);
+
+            expect(addRes.success).toBe(true);
+            expect(addRes.msg).toBeUndefined();
+        });
+
+        it('should allow discarding after opening with pure run and adding to existing melds', () => {
+            // Setup: CPU has already placed a meld on the table
+            const cpuMeld = [new Card('♠', '7', 100), new Card('♠', '8', 101), new Card('♠', '9', 102)];
+            game.melds.push(organizeMeld(cpuMeld));
+
+            // Player has opening melds: Pure Run (30pts) + Set (6pts) = 36pts
+            const run = [new Card('♥', 'Q', 1), new Card('♥', 'K', 2), new Card('♥', 'A', 3)];
+            const set = [new Card('♠', '2', 4), new Card('♣', '2', 5), new Card('♦', '2', 6)];
+
+            // Player also has jokers to add to existing melds and a discard card
+            const joker = new Card('JK', 'Joker', 7);
+            const discardCard = new Card('♣', '5', 99);
+
+            game.pHand.push(...run, ...set, joker, discardCard);
+
+            // Player melds to meet opening requirements
+            game.attemptMeld(run);
+            game.attemptMeld(set);
+
+            // Add joker to existing CPU meld
+            game.addToExistingMeld(0, [joker]);
+
+            // Player should be able to discard and open successfully
+            const res = game.attemptDiscard(99);
+
+            expect(res.success).toBe(true);
+            expect(game.hasOpened.human).toBe(true);
+        });
+
+        it('should allow adding to existing melds after meeting 36pt + pure run requirement', () => {
+            // Setup: CPU has already placed melds on the table
+            const cpuMeld = [new Card('♠', '7', 100), new Card('♠', '8', 101), new Card('♠', '9', 102)];
+            game.melds.push(organizeMeld(cpuMeld));
+
+            // Player creates opening melds: Pure Run (30pts) + Set (6pts) = 36pts FIRST
+            const run = [new Card('♥', 'Q', 1), new Card('♥', 'K', 2), new Card('♥', 'A', 3)]; // 30 pts
+            const set = [new Card('♠', '2', 4), new Card('♣', '2', 5), new Card('♦', '2', 6)]; // 6 pts
+
+            // Extra cards: Joker to add to CPU meld, and discard card
+            const joker = new Card('JK', 'Joker', 7);
+            const discardCard = new Card('♣', '5', 99);
+
+            game.pHand.push(...run, ...set, joker, discardCard);
+
+            // Player creates pure run + set (36 pts total - meets requirements)
+            game.attemptMeld(run);
+            game.attemptMeld(set);
+
+            // NOW player can add joker to existing CPU meld (because requirements are met)
+            game.addToExistingMeld(0, [joker]);
+
+            // Player should be able to discard and open successfully
+            const res = game.attemptDiscard(99);
+
+            expect(res.success).toBe(true);
+            expect(game.hasOpened.human).toBe(true);
+        });
     });
 
     describe('Joker Swapping', () => {

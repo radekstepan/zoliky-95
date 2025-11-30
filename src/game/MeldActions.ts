@@ -5,12 +5,23 @@ import { validateMeld, organizeMeld, sortHandLogic } from "../core/rules";
 
 function recalculateTurnPoints(state: IGameState) {
     let total = 0;
+
+    // Count points from new melds created this turn
     state.turnMelds.forEach(idx => {
         if (state.melds[idx]) {
             const res = validateMeld(state.melds[idx]);
             if (res.valid) total += res.points;
         }
     });
+
+    // Count points from cards added to existing melds this turn
+    // For each addition, sum up the individual card values
+    state.turnAdditions.forEach(addition => {
+        addition.cards.forEach(card => {
+            total += card.getValue();
+        });
+    });
+
     state.turnPoints = total;
 }
 
@@ -27,17 +38,6 @@ function checkRequirementUsage(state: IGameState, cards: ICard[]) {
             if (idx > -1) state.swappedJokerIds.splice(idx, 1);
         });
     }
-}
-
-function isOpeningConditionMet(state: IGameState): boolean {
-    if (state.hasOpened.human) return true;
-    if (state.turnPoints < 36) return false;
-
-    return state.turnMelds.some(idx => {
-        if (idx >= state.melds.length) return false;
-        const res = validateMeld(state.melds[idx]);
-        return res.type === 'run' && res.isPure;
-    });
 }
 
 // --- Actions ---
@@ -72,9 +72,23 @@ export function addToExistingMeld(state: IGameState, meldIndex: number, selected
 
     const isCreatedThisTurn = state.turnMelds.includes(meldIndex);
 
-    // If not created this turn, we must verify opening conditions are met
-    if (!isCreatedThisTurn && !isOpeningConditionMet(state)) {
-        return { success: false, msg: "Must open (36pts + Pure Run) before adding to existing melds." };
+    // If not created this turn, check if opening conditions are already met
+    // Player must have 36+ points AND a pure run from NEW melds BEFORE adding to existing melds
+    if (!isCreatedThisTurn && !state.hasOpened.human) {
+        if (state.turnPoints < 36) {
+            return { success: false, msg: `Must have 36+ points to open before adding to existing melds. Current: ${state.turnPoints}` };
+        }
+
+        // Still need at least one pure run in turnMelds
+        const hasPureRun = state.turnMelds.some(idx => {
+            if (idx >= state.melds.length) return false;
+            const res = validateMeld(state.melds[idx]);
+            return res.type === 'run' && res.isPure;
+        });
+
+        if (!hasPureRun) {
+            return { success: false, msg: "Opening requires at least 1 Pure Run." };
+        }
     }
 
     selectedCards.forEach(c => c.representation = undefined);
@@ -98,9 +112,9 @@ export function addToExistingMeld(state: IGameState, meldIndex: number, selected
 
     state.melds[meldIndex] = organized;
 
-    if (isCreatedThisTurn) {
-        recalculateTurnPoints(state);
-    }
+    // Always recalculate points when adding cards (whether to new or existing melds)
+    // This ensures turnAdditions are counted toward opening requirements
+    recalculateTurnPoints(state);
 
     const ids = selectedCards.map(c => c.id);
     state.pHand = state.pHand.filter(c => !ids.includes(c.id));
