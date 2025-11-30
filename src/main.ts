@@ -191,7 +191,7 @@ const App = {
 
             const finishTurn = () => {
                 if (res.winner) {
-                    ui.showWinModal(`${res.winner} Wins! Opponent score: ${res.score}`);
+                    ui.showWinModal(`${res.winner} Wins! Opponent score: ${res.score}`, res.winner);
                     return;
                 }
 
@@ -239,7 +239,7 @@ const App = {
 
                                     ui.animateCpuDiscard(dCard, () => {
                                         if (cpuRes.winner) {
-                                            ui.showWinModal(`${cpuRes.winner} Wins! You lose ${cpuRes.score} pts.`);
+                                            ui.showWinModal(`${cpuRes.winner} Wins! You lose ${cpuRes.score} pts.`, cpuRes.winner);
                                         }
                                         ui.render();
                                         ui.updateStatus(`Round ${game.round}. Your turn.`);
@@ -253,7 +253,7 @@ const App = {
                             } else {
                                 ui.render();
                                 if (cpuRes.winner) {
-                                    ui.showWinModal(`${cpuRes.winner} Wins! You lose ${cpuRes.score} pts.`);
+                                    ui.showWinModal(`${cpuRes.winner} Wins! You lose ${cpuRes.score} pts.`, cpuRes.winner);
                                 }
                                 ui.updateStatus(`Round ${game.round}. Your turn.`);
                             }

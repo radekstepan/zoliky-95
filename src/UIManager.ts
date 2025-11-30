@@ -446,11 +446,14 @@ export class UIManager {
         this.ui.status.innerText = msg;
     }
 
-    public showWinModal(msg: string) {
+    public showWinModal(msg: string, winner?: string) {
         this.sound.playWin();
         this.ui.modalMsg.innerText = msg;
         this.ui.modal.style.display = 'flex';
-        this.startConfetti();
+        // Only show confetti when player wins
+        if (winner === 'Human') {
+            this.startConfetti();
+        }
     }
 
     public closeWinModal() {
@@ -622,7 +625,7 @@ export class UIManager {
         if (res.success) {
             this.render();
             this.animateToMeld(selected, startRects, meldIdx, () => {
-                if (res.winner) this.showWinModal(`${res.winner} Wins!`);
+                if (res.winner) this.showWinModal(`${res.winner} Wins!`, res.winner);
             });
         } else {
             this.showAlert(res.msg || "Invalid Move");
