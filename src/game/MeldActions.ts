@@ -58,7 +58,7 @@ export function attemptMeld(state: IGameState, selectedCards: ICard[]): { succes
 
     state.melds.push(organized);
     state.turnMelds.push(state.melds.length - 1);
-    
+
     recalculateTurnPoints(state);
 
     const ids = selectedCards.map(c => c.id);
@@ -69,7 +69,7 @@ export function attemptMeld(state: IGameState, selectedCards: ICard[]): { succes
 
 export function addToExistingMeld(state: IGameState, meldIndex: number, selectedCards: ICard[]): { success: boolean; msg?: string; winner?: string } {
     if (state.phase !== 'action') return { success: false, msg: "Must draw a card first." };
-    
+
     const isCreatedThisTurn = state.turnMelds.includes(meldIndex);
 
     // If not created this turn, we must verify opening conditions are met
@@ -86,8 +86,8 @@ export function addToExistingMeld(state: IGameState, meldIndex: number, selected
 
     const res = validateMeld(organized);
     if (!res.valid) {
-         selectedCards.forEach(c => c.representation = undefined);
-         return { success: false, msg: "Cannot add cards to this meld." };
+        selectedCards.forEach(c => c.representation = undefined);
+        return { success: false, msg: "Cannot add cards to this meld." };
     }
 
     checkRequirementUsage(state, selectedCards);
@@ -97,7 +97,7 @@ export function addToExistingMeld(state: IGameState, meldIndex: number, selected
     }
 
     state.melds[meldIndex] = organized;
-    
+
     if (isCreatedThisTurn) {
         recalculateTurnPoints(state);
     }
@@ -136,14 +136,20 @@ export function attemptJokerSwap(state: IGameState, meldIndex: number, handCardI
         };
     }
 
+    // Check the meld type and size BEFORE attempting the swap
+    // For runs: always allow swap
+    // For sets: only allow swap if the set currently has 4 cards (including the joker)
+    const currentMeldResult = validateMeld(meld);
+    if (!currentMeldResult.valid) return { success: false, msg: "Invalid meld." };
+
+    if (currentMeldResult.type === 'set' && meld.length < 4) {
+        return { success: false, msg: "Can only swap Joker from a complete Set (4 cards)." };
+    }
+
     meld[jokerIdx] = handCard;
     const organized = organizeMeld(meld);
     const res = validateMeld(organized);
     if (!res.valid) return { success: false, msg: "Card does not fit in meld." };
-
-    if (res.type === 'set' && organized.length < 4) {
-        return { success: false, msg: "Can only swap Joker from a complete Set (4 cards)." };
-    }
 
     state.melds[meldIndex] = organized;
 

@@ -19,13 +19,13 @@ describe('Gameplay Scenarios', () => {
             // Pure Run (A,2,3) = 6 pts
             const run = [new Card('♥', 'A', 1), new Card('♥', '2', 2), new Card('♥', '3', 3)];
             game.pHand.push(...run);
-            
+
             game.attemptMeld(run);
-            
+
             // Attempt to finish turn (discard)
             game.pHand.push(new Card('♠', 'K', 99));
             const res = game.attemptDiscard(99);
-            
+
             expect(res.success).toBe(false);
             expect(res.msg).toContain('36+');
         });
@@ -35,7 +35,7 @@ describe('Gameplay Scenarios', () => {
             const impure = [new Card('♥', 'Q', 1), new Card('♥', 'K', 2), new Card('JK', 'Joker', 3)];
             // Set (High points)
             const set = [new Card('♠', 'K', 4), new Card('♣', 'K', 5), new Card('♦', 'K', 6)];
-            
+
             game.pHand.push(...impure, ...set);
             game.attemptMeld(impure);
             game.attemptMeld(set);
@@ -70,38 +70,71 @@ describe('Gameplay Scenarios', () => {
             // Setup table meld
             const meld = [new Card('♥', '4', 1), new Card('♥', '5', 2), new Card('JK', 'Joker', 3)];
             game.melds.push(organizeMeld(meld));
-            
+
             // Hand has 6H
             game.pHand.push(new Card('♥', '6', 10));
-            
+
             const res = game.attemptJokerSwap(0, 10);
             expect(res.success).toBe(false);
             expect(res.msg).toContain('Must open');
         });
 
-        it('should NOT allow swapping from Set of 3 (Leaving only 2 suits + replacement)', () => {
-            // Rule: "You cannot take a Joker from a Set of 3 if it leaves only 3 suits on the table."
-            // Implicitly means you need to form a set of 4 suits to take the joker out? 
-            // Or rather, if table is 4H, 4D, Joker. (3 cards). Joker represents 4C. 
-            // I swap with 4C. Table becomes 4H, 4D, 4C. Valid set of 3.
-            // Wait, RULES.md said: "You cannot take a Joker from a Set of 3 if it leaves only 3 suits on the table."
-            // This usually means the joker was the 4th card, or the constraint prevents reducing a Set of 3 (inc joker) -> Set of 3 (no joker).
-            // Actually, usually you can only take joker if the *Joker placement* completed a set of 4?
-            // Let's check code implementation in MeldActions: 
-            // "Can only swap Joker from a complete Set (4 cards)."
-            
+        it('should NOT allow swapping from Set of 3 with Joker', () => {
             game.hasOpened.human = true;
+            // Set of 3: 4♥, 4♦, Joker (representing 4♣ or 4♠)
             const meld = [new Card('♥', '4', 1), new Card('♦', '4', 2), new Card('JK', 'Joker', 3)];
             game.melds.push(organizeMeld(meld));
-            
-            // Representation is 4♣ or 4♠. Let's say 4♣.
+
+            // Get the joker's representation
             const rep = game.melds[0].find(c => c.isJoker)!.representation!;
-            
+
+            // Hand has the card the joker represents
             game.pHand.push(new Card(rep.suit, rep.rank, 10));
-            
+
             const res = game.attemptJokerSwap(0, 10);
             expect(res.success).toBe(false);
             expect(res.msg).toContain('complete Set');
+        });
+
+        it('should allow swapping from Set of 4 with Joker', () => {
+            game.hasOpened.human = true;
+            // Set of 4: 4♥, 4♦, 4♣, Joker (representing 4♠)
+            const meld = [
+                new Card('♥', '4', 1),
+                new Card('♦', '4', 2),
+                new Card('♣', '4', 3),
+                new Card('JK', 'Joker', 4)
+            ];
+            game.melds.push(organizeMeld(meld));
+
+            // Get the joker's representation
+            const rep = game.melds[0].find(c => c.isJoker)!.representation!;
+
+            // Hand has the card the joker represents
+            game.pHand.push(new Card(rep.suit, rep.rank, 10));
+
+            const res = game.attemptJokerSwap(0, 10);
+            expect(res.success).toBe(true);
+            expect(game.pHand.some(c => c.isJoker)).toBe(true);
+        });
+
+        it('should allow swapping from Run with Joker', () => {
+            game.hasOpened.human = true;
+            // Run: 4♥, 5♥, Joker (representing 6♥)
+            const meld = [new Card('♥', '4', 1), new Card('♥', '5', 2), new Card('JK', 'Joker', 3)];
+            game.melds.push(organizeMeld(meld));
+
+            // Get the joker's representation
+            const rep = game.melds[0].find(c => c.isJoker)!.representation!;
+            expect(rep.rank).toBe('6');
+            expect(rep.suit).toBe('♥');
+
+            // Hand has 6♥
+            game.pHand.push(new Card('♥', '6', 10));
+
+            const res = game.attemptJokerSwap(0, 10);
+            expect(res.success).toBe(true);
+            expect(game.pHand.some(c => c.isJoker)).toBe(true);
         });
     });
 
@@ -109,7 +142,7 @@ describe('Gameplay Scenarios', () => {
         it('should win when discarding last card after opening', () => {
             game.hasOpened.human = true;
             game.pHand = [new Card('♥', 'K', 1)];
-            
+
             const res = game.attemptDiscard(1);
             expect(res.success).toBe(true);
             expect(res.winner).toBe('Human');
@@ -118,7 +151,7 @@ describe('Gameplay Scenarios', () => {
         it('should fail to win if requirements not met', () => {
             game.hasOpened.human = false;
             game.pHand = [new Card('♥', 'K', 1)];
-            
+
             const res = game.attemptDiscard(1);
             expect(res.success).toBe(false);
             expect(res.winner).toBeUndefined();
