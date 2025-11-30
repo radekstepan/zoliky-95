@@ -297,6 +297,16 @@ const App = {
         }
     },
 
+    undoJolly: () => {
+        const res = game.undoJolly();
+        if (res.success) {
+            ui.render();
+            ui.updateStatus("Jolly Hand cancelled. Select a pile.");
+        } else {
+            ui.showAlert(res.msg || "Cannot undo");
+        }
+    },
+
     cancelMelds: () => {
         const cardIds = game.getTurnActiveCardIds();
         const startRects = ui.captureCardPositions(cardIds);

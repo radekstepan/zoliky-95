@@ -266,5 +266,58 @@ describe('Gameplay Scenarios', () => {
             const res = game.attemptJollyHand();
             expect(res.success).toBe(false);
         });
+
+        it('should allow undoing Jolly Hand before melding', () => {
+            // Setup: Round 3, Not Opened, 12 Cards
+            game.round = 3;
+            game.hasOpened.human = false;
+            game.phase = 'draw';
+            game.pHand = Array(12).fill(null).map((_, i) => new Card('♠', '2', i + 100));
+            game.bottomCard = new Card('♥', 'A', 999);
+
+            // Take Jolly Hand
+            const jollyRes = game.attemptJollyHand();
+            expect(jollyRes.success).toBe(true);
+            expect(game.pHand.length).toBe(13);
+            expect(game.isJollyTurn).toBe(true);
+            expect(game.bottomCard).toBeNull();
+
+            // Undo Jolly Hand
+            const undoRes = game.undoJolly();
+            expect(undoRes.success).toBe(true);
+            expect(game.pHand.length).toBe(12);
+            expect(game.isJollyTurn).toBe(false);
+            expect(game.phase).toBe('draw');
+            expect(game.bottomCard).not.toBeNull();
+            expect(game.bottomCard?.id).toBe(999);
+        });
+
+        it('should NOT allow undoing Jolly Hand after melding', () => {
+            // Setup and take Jolly Hand
+            game.round = 3;
+            game.hasOpened.human = false;
+            game.phase = 'draw';
+            const cards = [
+                new Card('♥', 'Q', 1),
+                new Card('♥', 'K', 2),
+                new Card('♥', 'A', 3),
+            ];
+            // Need exactly 12 cards to pickup Jolly Hand
+            const otherCards = Array(9).fill(null).map((_, i) => new Card('♠', '2', i + 100));
+            game.pHand = [...cards, ...otherCards];
+            game.bottomCard = new Card('♦', '5', 999);
+
+            game.attemptJollyHand();
+            expect(game.isJollyTurn).toBe(true);
+
+            // Make a meld
+            game.attemptMeld(cards);
+            expect(game.turnMelds.length).toBeGreaterThan(0);
+
+            // Try to undo - should fail
+            const undoRes = game.undoJolly();
+            expect(undoRes.success).toBe(false);
+            expect(undoRes.msg).toContain('Cannot undo after melding');
+        });
     });
 });

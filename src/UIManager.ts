@@ -296,11 +296,15 @@ export class UIManager {
 
         // --- Cancel / Undo Logic ---
         const canUndoDraw = isActionPhase && drawnFromDiscardId && turnMelds.length === 0 && turnAdditions.length === 0;
+        const canUndoJolly = isActionPhase && this.game.isJollyTurn && turnMelds.length === 0 && turnAdditions.length === 0;
         const canCancelMelds = (turnMelds.length > 0 || turnAdditions.length > 0) && !this.game.hasOpened.human;
 
         if (canUndoDraw) {
             this.ui.menuUndo.classList.remove('disabled');
             this.ui.menuUndo.onclick = () => (window as any).game.undoDraw();
+        } else if (canUndoJolly) {
+            this.ui.menuUndo.classList.remove('disabled');
+            this.ui.menuUndo.onclick = () => (window as any).game.undoJolly();
         } else if (canCancelMelds) {
             this.ui.menuUndo.classList.remove('disabled');
             this.ui.menuUndo.onclick = () => (window as any).game.cancelMelds();

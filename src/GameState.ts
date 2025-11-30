@@ -7,7 +7,7 @@ import { Card } from "./core/Card";
 import { attemptMeld, addToExistingMeld, attemptJokerSwap, cancelTurnMelds } from "./game/MeldActions";
 import { drawCard, undoDraw, attemptDiscard, resetTurnState } from "./game/TurnActions";
 import { processCpuTurn, CpuTurnResult } from "./game/CpuActions";
-import { attemptJollyHand } from "./game/JollyActions";
+import { attemptJollyHand, undoJolly } from "./game/JollyActions";
 
 export class GameState implements IGameState {
     public deck: Deck;
@@ -127,7 +127,7 @@ export class GameState implements IGameState {
         if (idx !== -1) {
             const newId = 1000 + Math.floor(Math.random() * 100000);
             const newCard = new Card(suit, rank, newId);
-            newCard.selected = this.pHand[idx].selected; 
+            newCard.selected = this.pHand[idx].selected;
             this.pHand[idx] = newCard;
         }
     }
@@ -164,6 +164,10 @@ export class GameState implements IGameState {
 
     public attemptJollyHand() {
         return attemptJollyHand(this);
+    }
+
+    public undoJolly() {
+        return undoJolly(this);
     }
 
     public processCpuTurn(): CpuTurnResult {
